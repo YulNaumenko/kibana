@@ -21,7 +21,7 @@ export const initUptimeServer = (
   );
 
   uptimeAlertTypeFactories.forEach(alertType =>
-    plugins.alerting.setup.registerType(alertType(server, libs))
+    plugins.alerting.registerType(alertType(server, libs))
   );
 
   const graphQLSchema = makeExecutableSchema({

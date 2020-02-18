@@ -14,6 +14,8 @@ export function plugin(initializerContext: PluginInitializerContext) {
 
 export class Plugin {
   public setup(core: UptimeCoreSetup, plugins: UptimeCorePlugins) {
-    initServerWithKibana(core, plugins);
+    initServerWithKibana({ route: core.http.createRouter() }, plugins);
   }
+
+  public start(core: any, plugins: any) {}
 }

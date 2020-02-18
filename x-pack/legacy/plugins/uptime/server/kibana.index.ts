@@ -25,13 +25,13 @@ export interface KibanaServer extends Server {
 }
 
 export const initServerWithKibana = (server: UptimeCoreSetup, plugins: UptimeCorePlugins) => {
-  const { usageCollection, xpack } = plugins;
+  const { features, usageCollection } = plugins;
   const libs = compose(server, plugins);
   KibanaTelemetryAdapter.registerUsageCollector(usageCollection);
 
   initUptimeServer(server, libs, plugins);
 
-  xpack.registerFeature({
+  features.registerFeature({
     id: PLUGIN.ID,
     name: i18n.translate('xpack.uptime.featureRegistry.uptimeFeatureName', {
       defaultMessage: 'Uptime',

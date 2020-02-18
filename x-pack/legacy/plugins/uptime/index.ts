@@ -37,24 +37,9 @@ export const uptime = (kibana: any) =>
     },
     init(server: KibanaServer) {
       const initializerContext = {} as PluginInitializerContext;
-      const { savedObjects } = server;
-      const { alerting, elasticsearch, xpack_main, triggers_actions_ui } = server.plugins;
-      const { usageCollection } = server.newPlatform.setup.plugins;
 
-      console.log('server', JSON.stringify(Object.keys(server).sort(), null, 2));
-      console.log('core', JSON.stringify(Object.keys(server.plugins).sort(), null, 2));
-      plugin(initializerContext).setup(
-        {
-          route: server.newPlatform.setup.core.http.createRouter(),
-        },
-        {
-          alerting,
-          elasticsearch,
-          savedObjects,
-          usageCollection,
-          xpack: xpack_main,
-          triggers_actions_ui,
-        }
-      );
+      const instance = plugin(initializerContext);
+      instance.setup(server.newPlatform.setup.core, server.newPlatform.setup.plugins);
+      instance.start(server.newPlatform.start.core, server.newPlatform.start.plugins);
     },
   });
