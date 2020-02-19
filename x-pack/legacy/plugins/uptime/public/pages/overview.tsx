@@ -74,9 +74,7 @@ export const OverviewPageComponent = ({ autocomplete, indexPattern, setEsKueryFi
   const linkParameters = stringifyUrlParams(params, true);
 
   const kibana = useKibana();
-  const {
-    services: { triggers_actions_ui: triggers },
-  } = kibana;
+
   const {
     services: {
       data: { fieldFormats },
@@ -84,8 +82,8 @@ export const OverviewPageComponent = ({ autocomplete, indexPattern, setEsKueryFi
       charts,
       triggers_actions_ui: { actionTypeRegistry, alertTypeRegistry },
       uiSettings,
+      notifications,
     },
-    notifications: { toasts },
   } = kibana;
   const vals = {
     addFlyoutVisible: true,
@@ -96,7 +94,7 @@ export const OverviewPageComponent = ({ autocomplete, indexPattern, setEsKueryFi
     dataFieldsFormats: fieldFormats,
     charts,
     uiSettings,
-    toastNotifications: toasts,
+    toastNotifications: notifications?.toasts,
   };
   return (
     <>

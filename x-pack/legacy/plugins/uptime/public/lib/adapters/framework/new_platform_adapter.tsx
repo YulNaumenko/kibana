@@ -4,16 +4,18 @@
  * you may not use this file except in compliance with the Elastic License.
  */
 
-import { ChromeBreadcrumb, LegacyCoreStart } from 'src/core/public';
+import { ChromeBreadcrumb, LegacyCoreStart, CoreStart } from 'src/core/public';
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { get } from 'lodash';
 import { i18n as i18nFormatter } from '@kbn/i18n';
-import { PluginsStart } from 'ui/new_platform/new_platform';
+import { PluginsStart, PluginsSetup } from 'ui/new_platform/new_platform';
+import { TriggersAndActionsUIPublicPluginSetup } from '../../../../../../../plugins/triggers_actions_ui/public';
 import { AlertMonitorStatus } from '../../../components/connected';
 import {
   AlertTypeModel,
   ValidationResult,
+  // eslint-disable-next-line @kbn/eslint/no-restricted-paths
 } from '../../../../../../../plugins/triggers_actions_ui/public/types';
 import { CreateGraphQLClient } from './framework_adapter_types';
 import { UptimeApp, UptimeAppProps } from '../../../uptime_app';
@@ -27,9 +29,13 @@ import {
 import { UMFrameworkAdapter } from '../../lib';
 import { createApolloClient } from './apollo_client_adapter';
 
+export interface UptimePluginsSetup extends PluginsSetup {
+  triggers_actions_ui: TriggersAndActionsUIPublicPluginSetup;
+}
+
 export const getKibanaFrameworkAdapter = (
   core: CoreStart,
-  plugins: PluginsSetup
+  plugins: UptimePluginsSetup
 ): UMFrameworkAdapter => {
   const {
     application: { capabilities },

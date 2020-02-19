@@ -24,6 +24,7 @@ import { store } from './state';
 import { setBasePath } from './state/actions';
 import { PageRouter } from './routes';
 import { PageHeader } from './components/connected/pages/page_header_container';
+import { UptimePluginsSetup } from './lib/adapters/framework/new_platform_adapter';
 
 export interface UptimeAppColors {
   danger: string;
@@ -45,7 +46,7 @@ export interface UptimeAppProps {
   isInfraAvailable: boolean;
   isLogsAvailable: boolean;
   kibanaBreadcrumbs: ChromeBreadcrumb[];
-  plugins: PluginsSetup;
+  plugins: UptimePluginsSetup;
   routerBasename: string;
   setBreadcrumbs: UMUpdateBreadcrumbs;
   setBadge: UMUpdateBadge;
