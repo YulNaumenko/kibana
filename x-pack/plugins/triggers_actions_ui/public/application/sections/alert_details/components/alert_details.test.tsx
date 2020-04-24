@@ -29,6 +29,15 @@ jest.mock('../../../lib/capabilities', () => ({
   hasSaveAlertsCapability: jest.fn(() => true),
 }));
 
+jest.mock('react-router-dom', () => ({
+  useHistory: () => ({
+    push: jest.fn(),
+  }),
+  useLocation: () => ({
+    pathname: '/triggersActions/alerts/',
+  }),
+}));
+
 const mockAlertApis = {
   muteAlert: jest.fn(),
   unmuteAlert: jest.fn(),
