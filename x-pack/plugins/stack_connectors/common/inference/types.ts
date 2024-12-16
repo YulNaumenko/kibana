@@ -18,6 +18,10 @@ import {
   SparseEmbeddingResponseSchema,
   TextEmbeddingParamsSchema,
   TextEmbeddingResponseSchema,
+  UnifiedChatCompleteParamsSchema,
+  UnifiedChatCompleteResponseSchema,
+  DashboardActionParamsSchema,
+  DashboardActionResponseSchema,
 } from './schema';
 import { ConfigProperties } from '../dynamic_config/types';
 
@@ -26,6 +30,9 @@ export type Secrets = TypeOf<typeof SecretsSchema>;
 
 export type ChatCompleteParams = TypeOf<typeof ChatCompleteParamsSchema>;
 export type ChatCompleteResponse = TypeOf<typeof ChatCompleteResponseSchema>;
+
+export type UnifiedChatCompleteParams = TypeOf<typeof UnifiedChatCompleteParamsSchema>;
+export type UnifiedChatCompleteResponse = TypeOf<typeof UnifiedChatCompleteResponseSchema>;
 
 export type RerankParams = TypeOf<typeof RerankParamsSchema>;
 export type RerankResponse = TypeOf<typeof RerankResponseSchema>;
@@ -39,6 +46,9 @@ export type TextEmbeddingResponse = TypeOf<typeof TextEmbeddingResponseSchema>;
 export type StreamingResponse = TypeOf<typeof StreamingResponseSchema>;
 
 export type FieldsConfiguration = Record<string, ConfigProperties>;
+
+export type DashboardActionParams = TypeOf<typeof DashboardActionParamsSchema>;
+export type DashboardActionResponse = TypeOf<typeof DashboardActionResponseSchema>;
 
 export interface InferenceProvider {
   service: string;

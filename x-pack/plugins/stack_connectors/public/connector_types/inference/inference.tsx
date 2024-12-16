@@ -18,6 +18,7 @@ import { InferenceActionParams, InferenceConnector } from './types';
 
 interface ValidationErrors {
   subAction: string[];
+  body: string[];
   input: string[];
   // rerank only
   query: string[];
@@ -40,6 +41,7 @@ export function getConnectorType(): InferenceConnector {
       const translations = await import('./translations');
       const errors: ValidationErrors = {
         input: [],
+        body: [],
         subAction: [],
         inputType: [],
         query: [],

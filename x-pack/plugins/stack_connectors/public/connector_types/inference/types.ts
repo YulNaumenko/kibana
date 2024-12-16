@@ -12,6 +12,7 @@ import {
   RerankParams,
   SparseEmbeddingParams,
   TextEmbeddingParams,
+  UnifiedChatCompleteParams,
 } from '../../../common/inference/types';
 
 export type InferenceActionParams =

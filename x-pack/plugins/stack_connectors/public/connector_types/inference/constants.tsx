@@ -25,6 +25,17 @@ export const DEFAULT_TEXT_EMBEDDING_BODY = {
   inputType: 'ingest',
 };
 
+export const DEFAULT_UNIFIED_CHAT_COMPLETE_BODY = {
+  body: {
+    messages: [
+      {
+        role: 'user',
+        content: 'Hello world',
+      },
+    ],
+  },
+};
+
 export const DEFAULTS_BY_TASK_TYPE: Record<string, unknown> = {
   [SUB_ACTION.UNIFIED_COMPLETION]: DEFAULT_UNIFIED_CHAT_COMPLETE_BODY,
   [SUB_ACTION.UNIFIED_COMPLETION_STREAM]: DEFAULT_UNIFIED_CHAT_COMPLETE_BODY,

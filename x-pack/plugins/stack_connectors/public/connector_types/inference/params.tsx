@@ -12,11 +12,12 @@ import {
 } from '@kbn/triggers-actions-ui-plugin/public';
 import { EuiTextArea, EuiFormRow, EuiSpacer, EuiSelect } from '@elastic/eui';
 import type { RuleFormParamsErrors } from '@kbn/response-ops-rule-form';
+import { ActionVariable } from '@kbn/alerting-types';
 import {
-  ChatCompleteParams,
   RerankParams,
   SparseEmbeddingParams,
   TextEmbeddingParams,
+  UnifiedChatCompleteParams,
 } from '../../../common/inference/types';
 import { DEFAULTS_BY_TASK_TYPE } from './constants';
 import * as i18n from './translations';
@@ -25,10 +26,10 @@ import { InferenceActionConnector, InferenceActionParams } from './types';
 
 const InferenceServiceParamsFields: React.FunctionComponent<
   ActionParamsProps<InferenceActionParams>
-> = ({ actionParams, editAction, index, errors, actionConnector }) => {
+> = ({ actionParams, editAction, index, errors, actionConnector, messageVariables }) => {
   const { subAction, subActionParams } = actionParams;
 
-  const { taskType } = (actionConnector as unknown as InferenceActionConnector).config;
+  const { taskType, provider } = (actionConnector as unknown as InferenceActionConnector).config;
 
   useEffect(() => {
     if (!subAction) {
@@ -40,7 +41,7 @@ const InferenceServiceParamsFields: React.FunctionComponent<
         index
       );
     }
-  }, [editAction, index, subAction, taskType]);
+  }, [editAction, index, provider, subAction, taskType]);
 
   useEffect(() => {
     if (!subActionParams) {
@@ -56,7 +57,7 @@ const InferenceServiceParamsFields: React.FunctionComponent<
         index
       );
     }
-  }, [editAction, index, subActionParams, taskType]);
+  }, [editAction, index, provider, subActionParams, taskType]);
 
   const editSubActionParams = useCallback(
     (params: Partial<InferenceActionParams['subActionParams']>) => {
@@ -168,22 +169,6 @@ const UnifiedCompletionParamsFields: React.FunctionComponent<{
         dataTestSubj="inference-bodyJsonEditor"
       />
     </>
-  );
-};
-
-const CompletionParamsFields: React.FunctionComponent<{
-  subActionParams: ChatCompleteParams;
-  errors: RuleFormParamsErrors;
-  editSubActionParams: (params: Partial<InferenceActionParams['subActionParams']>) => void;
-}> = ({ subActionParams, editSubActionParams, errors }) => {
-  const { input } = subActionParams;
-
-  return (
-    <InferenceInput
-      input={input}
-      editSubActionParams={editSubActionParams}
-      inputError={errors.input as string}
-    />
   );
 };
 

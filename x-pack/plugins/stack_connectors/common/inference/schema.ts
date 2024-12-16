@@ -229,3 +229,12 @@ export const TextEmbeddingResponseSchema = schema.arrayOf(
 );
 
 export const StreamingResponseSchema = schema.stream();
+
+// Run action schema
+export const DashboardActionParamsSchema = schema.object({
+  dashboardId: schema.string(),
+});
+
+export const DashboardActionResponseSchema = schema.object({
+  available: schema.boolean(),
+});
