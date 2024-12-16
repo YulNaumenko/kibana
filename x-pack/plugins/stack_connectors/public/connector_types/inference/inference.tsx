@@ -46,8 +46,17 @@ export function getConnectorType(): InferenceConnector {
       };
 
       if (
+        subAction === SUB_ACTION.UNIFIED_COMPLETION ||
+        subAction === SUB_ACTION.UNIFIED_COMPLETION_STREAM ||
+        subAction === SUB_ACTION.UNIFIED_COMPLETION_ASYNC_ITERATOR
+      ) {
+        if (!subActionParams.body.messages.length) {
+          errors.body.push(translations.getRequiredMessage('Messages'));
+        }
+      }
+
+      if (
         subAction === SUB_ACTION.RERANK ||
-        subAction === SUB_ACTION.COMPLETION ||
         subAction === SUB_ACTION.TEXT_EMBEDDING ||
         subAction === SUB_ACTION.SPARSE_EMBEDDING
       ) {
@@ -76,7 +85,9 @@ export function getConnectorType(): InferenceConnector {
         errors.subAction.push(translations.getRequiredMessage('Action'));
       } else if (
         ![
-          SUB_ACTION.COMPLETION,
+          SUB_ACTION.UNIFIED_COMPLETION,
+          SUB_ACTION.UNIFIED_COMPLETION_STREAM,
+          SUB_ACTION.UNIFIED_COMPLETION_ASYNC_ITERATOR,
           SUB_ACTION.SPARSE_EMBEDDING,
           SUB_ACTION.RERANK,
           SUB_ACTION.TEXT_EMBEDDING,

@@ -32,7 +32,13 @@ const InferenceServiceParamsFields: React.FunctionComponent<
 
   useEffect(() => {
     if (!subAction) {
-      editAction('subAction', taskType, index);
+      editAction(
+        'subAction',
+        provider === 'openai' && taskType === 'completion'
+          ? SUB_ACTION.UNIFIED_COMPLETION
+          : taskType,
+        index
+      );
     }
   }, [editAction, index, subAction, taskType]);
 
@@ -41,7 +47,11 @@ const InferenceServiceParamsFields: React.FunctionComponent<
       editAction(
         'subActionParams',
         {
-          ...(DEFAULTS_BY_TASK_TYPE[taskType] ?? {}),
+          ...(DEFAULTS_BY_TASK_TYPE[
+            provider === 'openai' && taskType === 'completion'
+              ? SUB_ACTION.UNIFIED_COMPLETION
+              : taskType
+          ] ?? {}),
         },
         index
       );
@@ -55,12 +65,24 @@ const InferenceServiceParamsFields: React.FunctionComponent<
     [editAction, index, subActionParams]
   );
 
-  if (subAction === SUB_ACTION.COMPLETION) {
+  if (subAction === SUB_ACTION.UNIFIED_COMPLETION) {
     return (
-      <CompletionParamsFields
+      <UnifiedCompletionParamsFields
         errors={errors}
+        messageVariables={messageVariables}
         editSubActionParams={editSubActionParams}
-        subActionParams={subActionParams as ChatCompleteParams}
+        subActionParams={subActionParams as UnifiedChatCompleteParams}
+      />
+    );
+  }
+
+  if (subAction === SUB_ACTION.UNIFIED_COMPLETION_ASYNC_ITERATOR) {
+    return (
+      <UnifiedCompletionParamsFields
+        errors={errors}
+        messageVariables={messageVariables}
+        editSubActionParams={editSubActionParams}
+        subActionParams={subActionParams as UnifiedChatCompleteParams}
       />
     );
   }
@@ -116,6 +138,36 @@ const InferenceInput: React.FunctionComponent<{
         fullWidth={true}
       />
     </EuiFormRow>
+  );
+};
+
+const UnifiedCompletionParamsFields: React.FunctionComponent<{
+  subActionParams: UnifiedChatCompleteParams;
+  errors: RuleFormParamsErrors;
+  editSubActionParams: (params: Partial<InferenceActionParams['subActionParams']>) => void;
+  messageVariables: ActionVariable[] | undefined;
+}> = ({ subActionParams, editSubActionParams, errors, messageVariables }) => {
+  const { body } = subActionParams ?? {};
+
+  return (
+    <>
+      <JsonEditorWithMessageVariables
+        messageVariables={messageVariables}
+        paramsProperty={'body'}
+        inputTargetValue={JSON.stringify(body)}
+        label={i18n.BODY}
+        errors={errors.body as string[]}
+        onDocumentsChange={(json: string) => {
+          editSubActionParams({ body: JSON.parse(json) });
+        }}
+        onBlur={() => {
+          if (!subActionParams.body) {
+            editSubActionParams({ body: { messages: [] } });
+          }
+        }}
+        dataTestSubj="inference-bodyJsonEditor"
+      />
+    </>
   );
 };
 

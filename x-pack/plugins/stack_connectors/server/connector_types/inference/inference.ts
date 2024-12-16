@@ -6,18 +6,31 @@
  */
 
 import { ServiceParams, SubActionConnector } from '@kbn/actions-plugin/server';
-
-import { PassThrough, Stream } from 'stream';
-import { IncomingMessage } from 'http';
+import { Stream } from 'openai/streaming';
+import { Readable } from 'stream';
 
 import { AxiosError } from 'axios';
 import {
   InferenceInferenceRequest,
   InferenceInferenceResponse,
-  InferenceTaskType,
 } from '@elastic/elasticsearch/lib/api/types';
+import { ConnectorUsageCollector } from '@kbn/actions-plugin/server/usage';
 import {
-  ChatCompleteParamsSchema,
+  filter,
+  from,
+  identity,
+  last,
+  lastValueFrom,
+  map,
+  merge,
+  mergeMap,
+  Observable,
+  scan,
+  share,
+  tap,
+} from 'rxjs';
+import OpenAI from 'openai';
+import {
   RerankParamsSchema,
   SparseEmbeddingParamsSchema,
   TextEmbeddingParamsSchema,
@@ -25,9 +38,6 @@ import {
 import {
   Config,
   Secrets,
-  ChatCompleteParams,
-  ChatCompleteResponse,
-  StreamingResponse,
   RerankParams,
   RerankResponse,
   SparseEmbeddingParams,
@@ -36,6 +46,8 @@ import {
   TextEmbeddingResponse,
 } from '../../../common/inference/types';
 import { SUB_ACTION } from '../../../common/inference/constants';
+import { initDashboard } from '../lib/gen_ai/create_gen_ai_dashboard';
+import { eventSourceStreamIntoObservable } from './helper';
 
 export class InferenceConnector extends SubActionConnector<Config, Secrets> {
   // Not using Axios
@@ -60,10 +72,25 @@ export class InferenceConnector extends SubActionConnector<Config, Secrets> {
   }
 
   private registerSubActions() {
+    // non-streaming unified completion task
     this.registerSubAction({
-      name: SUB_ACTION.COMPLETION,
-      method: 'performApiCompletion',
-      schema: ChatCompleteParamsSchema,
+      name: SUB_ACTION.UNIFIED_COMPLETION,
+      method: 'performApiUnifiedCompletion',
+      schema: UnifiedChatCompleteParamsSchema,
+    });
+
+    // streaming unified completion task
+    this.registerSubAction({
+      name: SUB_ACTION.UNIFIED_COMPLETION_STREAM,
+      method: 'performApiUnifiedCompletionStream',
+      schema: UnifiedChatCompleteParamsSchema,
+    });
+
+    // streaming unified completion task for langchain
+    this.registerSubAction({
+      name: SUB_ACTION.UNIFIED_COMPLETION_ASYNC_ITERATOR,
+      method: 'performApiUnifiedCompletionAsyncIterator',
+      schema: UnifiedChatCompleteParamsSchema,
     });
 
     this.registerSubAction({
@@ -83,12 +110,6 @@ export class InferenceConnector extends SubActionConnector<Config, Secrets> {
       method: 'performApiTextEmbedding',
       schema: TextEmbeddingParamsSchema,
     });
-
-    this.registerSubAction({
-      name: SUB_ACTION.COMPLETION_STREAM,
-      method: 'performApiCompletionStream',
-      schema: ChatCompleteParamsSchema,
-    });
   }
 
   /**
@@ -96,16 +117,155 @@ export class InferenceConnector extends SubActionConnector<Config, Secrets> {
    * @param input the text on which you want to perform the inference task.
    * @signal abort signal
    */
-  public async performApiCompletion({
-    input,
-    signal,
-  }: ChatCompleteParams & { signal?: AbortSignal }): Promise<ChatCompleteResponse> {
-    const response = await this.performInferenceApi(
-      { inference_id: this.inferenceId, input, task_type: 'completion' },
-      false,
-      signal
+  public async performApiUnifiedCompletion(
+    params: UnifiedChatCompleteParams & { signal?: AbortSignal }
+  ): Promise<UnifiedChatCompleteResponse> {
+    const res = await this.performApiUnifiedCompletionStream(params);
+
+    const v = from(eventSourceStreamIntoObservable(res as Readable)).pipe(
+      filter((line) => !!line && line !== '[DONE]'),
+      map((line) => {
+        return JSON.parse(line) as OpenAI.ChatCompletionChunk | { error: { message: string } };
+      }),
+      tap((line) => {
+        if ('error' in line) {
+          throw new Error(line.error.message);
+        }
+        if (
+          'choices' in line &&
+          line.choices.length &&
+          line.choices[0].finish_reason === 'length'
+        ) {
+          throw new Error('createTokenLimitReachedError()');
+        }
+      }),
+      filter((line): line is OpenAI.ChatCompletionChunk => {
+        return 'object' in line && line.object === 'chat.completion.chunk';
+      }),
+      mergeMap((chunk): Observable<UnifiedChatCompleteResponse> => {
+        const events: UnifiedChatCompleteResponse[] = [];
+        events.push({
+          choices: chunk.choices.map((c) => ({
+            message: c.delta,
+            finish_reason: c.finish_reason,
+            index: c.index,
+          })),
+          id: chunk.id,
+          model: chunk.model,
+          object: chunk.object,
+          usage: chunk.usage,
+        } as UnifiedChatCompleteResponse);
+        return from(events);
+      }),
+      identity
     );
-    return response.completion!;
+
+    const shared$ = v.pipe(share());
+
+    return lastValueFrom(
+      merge(
+        shared$,
+        shared$.pipe(
+          scan(
+            (prev, chunk) => {
+              if (chunk.choices.length > 0 && !chunk.usage) {
+                prev.choices[0].message.content += chunk.choices[0].message.content ?? '';
+
+                chunk.choices[0].message.tool_calls?.forEach((toolCall) => {
+                  let prevToolCall = prev.choices[0].message.tool_calls;
+                  if (!prevToolCall) {
+                    prev.choices[0].message.tool_calls = [
+                      {
+                        function: {
+                          name: '',
+                          arguments: '',
+                        },
+                        id: '',
+                      },
+                    ];
+
+                    prevToolCall = prev.choices[0].message.tool_calls;
+                  }
+
+                  prevToolCall.function.name += toolCall.function?.name;
+                  prevToolCall.function.arguments += toolCall.function?.arguments;
+                  prevToolCall.toolCall.id += toolCall.id;
+                });
+              } else if (chunk.usage) {
+                prev.usage = chunk.usage;
+              }
+              return { ...prev, id: chunk.id, model: chunk.model };
+            },
+            {
+              choices: [
+                {
+                  message: {
+                    content: '',
+                  },
+                },
+              ],
+              object: 'chat.completion',
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } as any
+          ),
+          last(),
+          map((concatenatedChunk): UnifiedChatCompleteResponse => {
+            // TODO: const validatedToolCalls = validateToolCalls(concatenatedChunk.choices[0].message.tool_calls);
+            return concatenatedChunk as unknown as UnifiedChatCompleteResponse;
+          })
+        )
+      )
+    );
+  }
+
+  /**
+   * responsible for making a esClient inference method to perform chat completetion task endpoint and returning the service response data
+   * @param input the text on which you want to perform the inference task.
+   * @signal abort signal
+   */
+  public async performApiUnifiedCompletionStream(
+    params: UnifiedChatCompleteParams & { signal?: AbortSignal }
+  ) {
+    return await this.esClient.transport.request(
+      {
+        method: 'POST',
+        path: `_inference/completion/${this.inferenceId}/_unified`,
+        body: params.body,
+      },
+      {
+        asStream: true,
+      }
+    );
+  }
+
+  /**
+   * Streamed requests (langchain)
+   * Uses the official OpenAI Node library, which handles Server-sent events for you.
+   * @param params - the request body
+   * @returns {
+   *  consumerStream: Stream<UnifiedChatCompleteResponse>; the result to be read/transformed on the server and sent to the client via Server Sent Events
+   *  tokenCountStream: Stream<UnifiedChatCompleteResponse>; the result for token counting stream
+   * }
+   */
+  public async performApiUnifiedCompletionAsyncIterator(
+    params: UnifiedChatCompleteParams & { signal?: AbortSignal },
+    connectorUsageCollector: ConnectorUsageCollector
+  ): Promise<{
+    consumerStream: Stream<UnifiedChatCompleteResponse>;
+    tokenCountStream: Stream<UnifiedChatCompleteResponse>;
+  }> {
+    try {
+      connectorUsageCollector.addRequestBodyBytes(undefined, params.body);
+      const res = await this.performApiUnifiedCompletionStream(params);
+      // splits the stream in two, teed[0] is used for the UI and teed[1] for token tracking
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const teed = res as any;
+      return { consumerStream: teed[0], tokenCountStream: teed[1] };
+      // since we do not use the sub action connector request method, we need to do our own error handling
+    } catch (e) {
+      const errorMessage = this.getResponseErrorMessage(e);
+      throw new Error(errorMessage);
+    }
   }
 
   /**
@@ -198,35 +358,39 @@ export class InferenceConnector extends SubActionConnector<Config, Secrets> {
     }
   }
 
-  private async streamAPI({
-    input,
-    signal,
-  }: ChatCompleteParams & { signal?: AbortSignal }): Promise<StreamingResponse> {
-    const response = await this.performInferenceApi(
-      { inference_id: this.inferenceId, input, task_type: this.taskType as InferenceTaskType },
-      true,
-      signal
-    );
-
-    return (response as unknown as Stream).pipe(new PassThrough());
-  }
-
   /**
-   *  takes input. It calls the streamApi method to make a
-   *  request to the Inference API with the message. It then returns a Transform stream
-   *  that pipes the response from the API through the transformToString function,
-   *  which parses the proprietary response into a string of the response text alone
-   * @param input A message to be sent to the API
-   * @signal abort signal
+   *  retrieves a dashboard from the Kibana server and checks if the
+   *  user has the necessary privileges to access it.
+   * @param dashboardId The ID of the dashboard to retrieve.
    */
-  public async performApiCompletionStream({
-    input,
-    signal,
-  }: ChatCompleteParams & { signal?: AbortSignal }): Promise<IncomingMessage> {
-    const res = (await this.streamAPI({
-      input,
-      signal,
-    })) as unknown as IncomingMessage;
-    return res;
+  public async getDashboard({
+    dashboardId,
+  }: DashboardActionParams): Promise<DashboardActionResponse> {
+    const privilege = (await this.esClient.transport.request({
+      path: '/_security/user/_has_privileges',
+      method: 'POST',
+      body: {
+        index: [
+          {
+            names: ['.kibana-event-log-*'],
+            allow_restricted_indices: true,
+            privileges: ['read'],
+          },
+        ],
+      },
+    })) as { has_all_requested: boolean };
+
+    if (!privilege?.has_all_requested) {
+      return { available: false };
+    }
+
+    const response = await initDashboard({
+      logger: this.logger,
+      savedObjectsClient: this.savedObjectsClient,
+      dashboardId,
+      genAIProvider: 'OpenAI',
+    });
+
+    return { available: response.success };
   }
 }
