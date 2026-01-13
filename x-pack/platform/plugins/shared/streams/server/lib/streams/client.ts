@@ -13,8 +13,10 @@ import type {
   QueryDslQueryContainer,
   Result,
 } from '@elastic/elasticsearch/lib/api/types';
-import type { IScopedClusterClient, Logger, KibanaRequest } from '@kbn/core/server';
+import type { IScopedClusterClient, KibanaRequest, Logger } from '@kbn/core/server';
 import { isNotFoundError } from '@kbn/es-errors';
+import type { LockManagerService } from '@kbn/lock-manager';
+import type { Condition } from '@kbn/streamlang';
 import type { RoutingStatus } from '@kbn/streams-schema';
 import {
   Streams,
@@ -22,23 +24,20 @@ import {
   getAncestors,
   getParentId,
 } from '@kbn/streams-schema';
-import type { LockManagerService } from '@kbn/lock-manager';
-import type { Condition } from '@kbn/streamlang';
-import type { AssetClient } from './assets/asset_client';
 import type { QueryClient } from './assets/query/query_client';
+import type { AttachmentClient } from './attachments/attachment_client';
 import {
   DefinitionNotFoundError,
   isDefinitionNotFoundError,
 } from './errors/definition_not_found_error';
 import { SecurityError } from './errors/security_error';
 import { StatusError } from './errors/status_error';
-import { LOGS_ROOT_STREAM_NAME, createRootStreamDefinition } from './root_stream_definition';
-import type { StreamsStorageClient } from './storage/streams_storage_client';
-import { State } from './state_management/state';
-import { checkAccess, checkAccessBulk } from './stream_crud';
 import { StreamsStatusConflictError } from './errors/streams_status_conflict_error';
-import type { FeatureClient } from './feature/feature_client';
-import type { AttachmentClient } from './attachments/attachment_client';
+import { LOGS_ROOT_STREAM_NAME, createRootStreamDefinition } from './root_stream_definition';
+import { State } from './state_management/state';
+import type { StreamsStorageClient } from './storage/streams_storage_client';
+import { checkAccess, checkAccessBulk } from './stream_crud';
+import type { SystemClient } from './system/system_client';
 
 interface AcknowledgeResponse<TResult extends Result> {
   acknowledged: true;
@@ -72,11 +71,10 @@ export class StreamsClient {
     private readonly dependencies: {
       lockManager: LockManagerService;
       scopedClusterClient: IScopedClusterClient;
-      assetClient: AssetClient;
       attachmentClient: AttachmentClient;
       queryClient: QueryClient;
+      systemClient: SystemClient;
       storageClient: StreamsStorageClient;
-      featureClient: FeatureClient;
       logger: Logger;
       request: KibanaRequest;
       isServerless: boolean;
@@ -103,10 +101,6 @@ export class StreamsClient {
 
   public async checkStreamStatus(): Promise<boolean | 'conflict'> {
     const rootLogsStreamExists = await this.checkRootLogsStreamExists();
-    if (this.dependencies.isServerless) {
-      // in serverless, Elasticsearch doesn't natively support streams yet
-      return rootLogsStreamExists;
-    }
     const isEnabledOnElasticsearch = await this.checkElasticsearchStreamStatus();
     if (isEnabledOnElasticsearch !== rootLogsStreamExists) {
       return 'conflict';
@@ -159,16 +153,13 @@ export class StreamsClient {
       );
     }
 
-    if (!this.dependencies.isServerless) {
-      // in serverless, Elasticsearch doesn't natively support streams yet
-      const elasticsearchStreamsEnabled = await this.checkElasticsearchStreamStatus();
+    const elasticsearchStreamsEnabled = await this.checkElasticsearchStreamStatus();
 
-      if (!elasticsearchStreamsEnabled) {
-        await this.dependencies.scopedClusterClient.asCurrentUser.transport.request({
-          method: 'POST',
-          path: '_streams/logs/_enable',
-        });
-      }
+    if (!elasticsearchStreamsEnabled) {
+      await this.dependencies.scopedClusterClient.asCurrentUser.transport.request({
+        method: 'POST',
+        path: '_streams/logs/_enable',
+      });
     }
 
     return { acknowledged: true, result: 'created' };
@@ -220,8 +211,8 @@ export class StreamsClient {
         }
       );
 
-      const { assetClient, attachmentClient, storageClient } = this.dependencies;
-      await Promise.all([assetClient.clean(), attachmentClient.clean(), storageClient.clean()]);
+      const { attachmentClient, queryClient, storageClient } = this.dependencies;
+      await Promise.all([queryClient.clean(), attachmentClient.clean(), storageClient.clean()]);
     }
 
     if (elasticsearchStreamsEnabled) {
@@ -587,15 +578,15 @@ export class StreamsClient {
   private getDataStreamAsIngestStream(
     dataStream: IndicesDataStream
   ): Streams.ClassicStream.Definition {
-    const now = new Date().toISOString();
+    const timestamp = new Date(0).toISOString();
 
     const definition: Streams.ClassicStream.Definition = {
       name: dataStream.name,
       description: '',
-      updated_at: now,
+      updated_at: timestamp,
       ingest: {
         lifecycle: { inherit: {} },
-        processing: { steps: [], updated_at: now },
+        processing: { steps: [], updated_at: timestamp },
         settings: {},
         classic: {},
         failure_store: { inherit: {} },
@@ -725,10 +716,6 @@ export class StreamsClient {
   }
 
   private async checkElasticsearchStreamStatus(): Promise<boolean> {
-    if (this.dependencies.isServerless) {
-      // in serverless, Elasticsearch doesn't natively support streams yet
-      return false;
-    }
     const response = (await this.dependencies.scopedClusterClient.asInternalUser.transport.request({
       method: 'GET',
       path: '/_streams/status',
