@@ -1,13 +1,16 @@
-## Architecture: Tools Are the Agent Execution Surface
+## Architecture: Services Are the Canonical Execution Surface
 
-Agent execution happens through the `threat_intel.*` tools. The tools are thin
-wrappers that validate compact arguments and delegate to the plugin's shared
-service modules (`server/services/`). Do **not** generate workflow YAML or call
-`workflow_execute_step` / `kibana.request` for these skill actions.
+The shared service modules in `server/services/` are the single source of truth
+for every domain action. They are reached through two entry points:
 
-The same shared services also sit behind public HTTP routes. Native Workflows,
-UI surfaces, and future `ecli` callers use those routes directly; Agent Builder
-skills should use the direct tools listed below.
+- **Agent Builder tools** (`threat_intel.*`) — thin wrappers that validate compact
+  arguments and call the service directly. Agents should use these.
+- **HTTP routes** (`/api/threat_intelligence/<action>`) — expose the same services
+  over HTTP. Native Workflows reach them via `kibana.request`; `ecli` callers and
+  other HTTP integrations use these routes as well.
+
+Do **not** generate workflow YAML or route agent calls through
+`workflow_execute_step` + `kibana.request` — call the tools directly.
 
 ## Rich attachments (inline Canvas UI)
 

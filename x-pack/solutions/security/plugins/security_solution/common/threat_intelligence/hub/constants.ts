@@ -138,10 +138,11 @@ export const THREAT_INTEL_TOOL_IDS = {
    * One-call orchestrated hunt that chains the tradecraft-style two-tier
    * model: Tier 1 (`hunt_for_threat`, atomic IOC lookups) → Tier 2
    * (`hunt_behavior`, LLM-refined behavioral rules with the affected-asset
-   * context from Tier 1 fed into the prompt). Agents call this directly
-   * through the tool surface; native Workflows call the matching HTTP
-   * route when they need both tiers without encoding the chaining
-   * themselves.
+   * context from Tier 1 fed into the prompt). Workflows (digest delivery,
+   * hit provenance backfill) call this directly via the internal HTTP
+   * route so they get Tier 2 without having to encode the chaining
+   * themselves; the granular tools remain available on the registry for
+   * power-user / LLM-driven control flows.
    */
   huntOrchestrated: 'threat_intel.hunt_orchestrated',
   /**
@@ -169,7 +170,8 @@ export const THREAT_INTEL_TOOL_IDS = {
 export const THREAT_INTELLIGENCE_API_BASE = '/api/threat_intelligence' as const;
 
 /**
- * Domain action routes. Each path is consumed by exactly one route handler in
+ * Domain action routes — these are the canonical execution surface of the
+ * skill. Each path is consumed by exactly one route handler in
  * `server/routes/` and by exactly one shared service module in
  * `server/services/`.
  */
