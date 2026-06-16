@@ -16,12 +16,7 @@ import { createDetectionRuleTool } from './create_detection_rule_tool';
 import { pciComplianceTool } from './pci_compliance_tool';
 import { pciScopeDiscoveryTool } from './pci_scope_discovery_tool';
 import { pciFieldMapperTool } from './pci_field_mapper_tool';
-import {
-  analyseEnvironmentTool,
-  extractIocsTool,
-  huntOrchestratedTool,
-  synthesizeAdvisoryTool,
-} from './threat_intelligence';
+import { analyseEnvironmentTool, extractIocsTool } from './threat_intelligence';
 import { registerSiemReadinessTools } from './siem_readiness';
 import { runRulePreviewTool } from './run_rule_preview_tool';
 import type { RunRulePreviewDeps } from '../../lib/detection_engine/rule_preview/api/preview_rules/run_rule_preview';
@@ -64,15 +59,11 @@ export const registerTools = async (
   // threat-intelligence plugin). Gated behind the
   // `threatIntelligenceSkillEnabled` experimental flag.
   //
-  // Only the registry tools are globally registered here:
+  // Only the `BuiltinToolDefinition` tools are globally registered here:
   //   - `extractIocsTool`         — invoked by Workflow 2 as a builtin step
   //   - `analyseEnvironmentTool`  — used by the orchestrating agent through
   //     the registry to tailor feed recommendations without consuming one of
   //     the skill's seven inline-tool slots.
-  //   - `huntOrchestratedTool`    — one-call Tier 1 + Tier 2 hunt exposed
-  //     through the registry because the skill is at its inline-tool cap.
-  //   - `synthesizeAdvisoryTool`  — cross-report advisory synthesis exposed
-  //     through the registry for digest / advisory prompts.
   // The remaining seven tools are `BuiltinSkillBoundedTool` and are
   // surfaced inline on the threat-intelligence skill (see
   // `agent_builder/skills/threat_intelligence/threat_intelligence_skill.ts`);
@@ -80,8 +71,6 @@ export const registerTools = async (
   if (experimentalFeatures.threatIntelligenceSkillEnabled) {
     agentBuilder.tools.register(extractIocsTool);
     agentBuilder.tools.register(analyseEnvironmentTool);
-    agentBuilder.tools.register(huntOrchestratedTool);
-    agentBuilder.tools.register(synthesizeAdvisoryTool);
   }
 
   registerSiemReadinessTools(agentBuilder, core, logger, isServerless);

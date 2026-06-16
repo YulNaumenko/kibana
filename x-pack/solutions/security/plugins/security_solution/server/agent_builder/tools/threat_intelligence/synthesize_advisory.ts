@@ -8,8 +8,9 @@
 import { z } from '@kbn/zod/v4';
 import { ToolType } from '@kbn/agent-builder-common';
 import { ToolResultType } from '@kbn/agent-builder-common/tools/tool_result';
-import type { BuiltinToolDefinition } from '@kbn/agent-builder-server';
+import type { BuiltinSkillBoundedTool } from '@kbn/agent-builder-server/skills';
 import {
+  GLOBAL_SPACE_ID,
   SEVERITY_LEVELS,
   SYNTHESIZE_ADVISORY_API_PATH,
   THREAT_CATEGORIES,
@@ -79,7 +80,7 @@ const synthesizeAdvisorySchema = z.object({
     ),
 });
 
-export const synthesizeAdvisoryTool: BuiltinToolDefinition<typeof synthesizeAdvisorySchema> = {
+export const synthesizeAdvisoryTool: BuiltinSkillBoundedTool<typeof synthesizeAdvisorySchema> = {
   id: THREAT_INTEL_TOOL_IDS.synthesizeAdvisory,
   type: ToolType.builtin,
   description:
@@ -92,8 +93,7 @@ export const synthesizeAdvisoryTool: BuiltinToolDefinition<typeof synthesizeAdvi
     'Inside Kibana orchestration, prefer calling the route directly via ' +
     '`execute_workflow_step` + `kibana-request`.',
   schema: synthesizeAdvisorySchema,
-  tags: ['threat-intel', 'advisory-synthesis'],
-  handler: async (params, { esClient, logger, modelProvider, spaceId }) => {
+  handler: async (params, { esClient, logger, modelProvider }) => {
     let model;
     try {
       model = await modelProvider.getDefaultModel();
@@ -103,16 +103,26 @@ export const synthesizeAdvisoryTool: BuiltinToolDefinition<typeof synthesizeAdvi
       model = undefined;
     }
     try {
-      const data = await synthesizeAdvisory(esClient.asCurrentUser, model, logger, spaceId, {
-        time_range: params.time_range,
-        categories: params.categories,
-        regions: params.regions,
-        min_severity: params.min_severity,
-        max_reports: params.max_reports,
-        description: params.description,
-        persist: params.persist,
-        generated_by: 'agent_builder',
-      });
+      // Agent Builder tools don't carry a request-scoped space — fall
+      // back to the global sentinel so the service still works under
+      // single-space deployments. Inside-Kibana orchestration should
+      // prefer the HTTP route for proper per-space scoping.
+      const data = await synthesizeAdvisory(
+        esClient.asCurrentUser,
+        model,
+        logger,
+        GLOBAL_SPACE_ID,
+        {
+          time_range: params.time_range,
+          categories: params.categories,
+          regions: params.regions,
+          min_severity: params.min_severity,
+          max_reports: params.max_reports,
+          description: params.description,
+          persist: params.persist,
+          generated_by: 'agent_builder',
+        }
+      );
       return { results: [{ type: ToolResultType.other, data }] };
     } catch (err) {
       logger.warn(`synthesize_advisory failed: ${(err as Error).message}`);

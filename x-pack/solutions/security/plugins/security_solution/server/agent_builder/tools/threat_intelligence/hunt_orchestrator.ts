@@ -8,7 +8,7 @@
 import { z } from '@kbn/zod/v4';
 import { ToolType } from '@kbn/agent-builder-common';
 import { ToolResultType } from '@kbn/agent-builder-common/tools/tool_result';
-import type { BuiltinToolDefinition } from '@kbn/agent-builder-server';
+import type { BuiltinSkillBoundedTool } from '@kbn/agent-builder-server/skills';
 import {
   HUNT_ORCHESTRATED_API_PATH,
   HUNT_TIER2_WHEN_OPTIONS,
@@ -122,7 +122,7 @@ const huntOrchestratedSchema = z.object({
     ),
 });
 
-export const huntOrchestratedTool: BuiltinToolDefinition<typeof huntOrchestratedSchema> = {
+export const huntOrchestratedTool: BuiltinSkillBoundedTool<typeof huntOrchestratedSchema> = {
   id: THREAT_INTEL_TOOL_IDS.huntOrchestrated,
   type: ToolType.builtin,
   description:
@@ -136,7 +136,6 @@ export const huntOrchestratedTool: BuiltinToolDefinition<typeof huntOrchestrated
     '`hunt_behavior` tools. Inside Kibana orchestration, prefer calling the route directly ' +
     'via `execute_workflow_step` + `kibana-request`.',
   schema: huntOrchestratedSchema,
-  tags: ['threat-intel', 'orchestrated-hunt'],
   handler: async (params, { esClient, logger, modelProvider }) => {
     let model;
     try {

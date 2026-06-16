@@ -110,14 +110,10 @@ describe('Security Skills', () => {
       expect(inlineTools).toHaveLength(7);
     });
 
-    it('includes registry tools used by advisory and orchestrated hunt prompts', () => {
+    it('does not expose advisory and orchestrated hunt as registry tools', () => {
       const tools = threatIntelligenceSkill.getRegistryTools!();
-      expect(tools).toEqual(
-        expect.arrayContaining([
-          THREAT_INTEL_TOOL_IDS.huntOrchestrated,
-          THREAT_INTEL_TOOL_IDS.synthesizeAdvisory,
-        ])
-      );
+      expect(tools).not.toContain(THREAT_INTEL_TOOL_IDS.huntOrchestrated);
+      expect(tools).not.toContain(THREAT_INTEL_TOOL_IDS.synthesizeAdvisory);
     });
   });
 

@@ -62,8 +62,6 @@ export const threatIntelligenceSkill = defineSkillType({
     'security.security_labs_search',
     THREAT_INTEL_TOOL_IDS.extractIocs,
     THREAT_INTEL_TOOL_IDS.analyseEnvironment,
-    THREAT_INTEL_TOOL_IDS.huntOrchestrated,
-    THREAT_INTEL_TOOL_IDS.synthesizeAdvisory,
     platformCoreTools.cases,
   ],
 });

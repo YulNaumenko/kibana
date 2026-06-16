@@ -298,25 +298,6 @@ evaluate.describe(
               {
                 input: {
                   question:
-                    'Use a one-call orchestrated hunt for the most relevant AWS SSM threat report and include affected assets if there are hits.',
-                },
-                output: {
-                  expected:
-                    'I will find the relevant AWS SSM report and run the orchestrated threat-intel hunt so Tier 1 environment hits and Tier 2 behavior analysis stay linked.',
-                },
-                metadata: {
-                  query_intent: 'Threat Intelligence Orchestrated Hunt',
-                  expectedSkill: 'threat-intelligence',
-                  expectedToolIds: [
-                    'load_skill',
-                    'threat_intel.search_reports',
-                    'threat_intel.hunt_orchestrated',
-                  ],
-                },
-              },
-              {
-                input: {
-                  question:
                     'What coverage gaps do recent cloud-security or ransomware reports suggest?',
                 },
                 output: {
@@ -372,21 +353,6 @@ evaluate.describe(
                   query_intent: 'Threat Intelligence Behavior Extraction',
                   expectedSkill: 'threat-intelligence',
                   expectedToolIds: ['load_skill', 'threat_intel.hunt_behavior'],
-                },
-              },
-              {
-                input: {
-                  question:
-                    'Create a concise advisory from recent medium-or-higher cloud-security threat intel.',
-                },
-                output: {
-                  expected:
-                    'I will synthesize a short cloud-security advisory from recent medium-or-higher threat reports and include recommended actions.',
-                },
-                metadata: {
-                  query_intent: 'Threat Intelligence Advisory',
-                  expectedSkill: 'threat-intelligence',
-                  expectedToolIds: ['load_skill', 'threat_intel.synthesize_advisory'],
                 },
               },
               {
