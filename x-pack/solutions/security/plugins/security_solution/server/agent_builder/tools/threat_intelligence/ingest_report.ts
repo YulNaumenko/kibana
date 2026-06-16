@@ -58,8 +58,8 @@ export const ingestReportTool: BuiltinSkillBoundedTool<typeof ingestReportSchema
     `Portability wrapper around POST ${INGEST_REPORT_API_PATH}. ` +
     'Ingest one threat intelligence report (analyst paste / ad-hoc URL / vendor advisory) ' +
     'into the source-agnostic `.kibana-threat-reports-*` data stream. The report is fingerprinted ' +
-    'for dedup so re-submitting the same content is a no-op. Inside Kibana, prefer calling the ' +
-    'route directly via `execute_workflow_step` + `kibana-request`.',
+    'for dedup so re-submitting the same content is a no-op. Agent Builder should call this ' +
+    'tool directly; native Workflows and UI surfaces use the matching HTTP route.',
   schema: ingestReportSchema,
   handler: async (params, { esClient, logger, spaceId }) => {
     try {

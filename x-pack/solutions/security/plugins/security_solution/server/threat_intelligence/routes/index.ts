@@ -42,15 +42,13 @@ export interface RouteRegistrationDeps {
 }
 
 /**
- * Per the Agent Builder architecture guidance, every domain action exposes
- * a public HTTP route. The skill markdown documents these routes; the
- * orchestrating agent invokes them via `execute_workflow_step` with
- * `kibana-request`. The Agent Builder tool wrappers in
- * `server/agent_builder/tools/` are thin portability shims that call into
- * the same shared services these routes use.
+ * Every domain action exposes a public HTTP route for native Workflows, UI
+ * surfaces, and future ecli callers. Agent Builder tools in
+ * `server/agent_builder/tools/` call the same shared services directly instead
+ * of routing agents through workflow-generated Kibana requests.
  */
 export const registerRoutes = (deps: RouteRegistrationDeps): void => {
-  // Domain-action routes — canonical execution surface.
+  // Domain-action HTTP contracts.
   registerSearchReportsRoute(deps);
   registerIngestReportRoute(deps);
   registerHuntBehaviorRoute(deps);

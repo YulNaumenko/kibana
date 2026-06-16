@@ -47,8 +47,8 @@ export const analyseEnvironmentTool: BuiltinToolDefinition<typeof analyseEnviron
     `Portability wrapper around POST ${ANALYSE_ENVIRONMENT_API_PATH}. ` +
     'Profile the customer environment to tailor threat-intelligence feed recommendations. ' +
     'Returns: (a) active integration data streams with hit counts; (b) the OS family mix ' +
-    '(windows / linux / macos); (c) the cloud-provider mix (aws / gcp / azure). Inside Kibana, ' +
-    'prefer calling the route directly via `execute_workflow_step` + `kibana-request`.',
+    '(windows / linux / macos); (c) the cloud-provider mix (aws / gcp / azure). Agent Builder ' +
+    'should call this tool directly; native Workflows and UI surfaces use the matching HTTP route.',
   schema: analyseEnvironmentSchema,
   tags: ['threat-intel', 'environment-profile'],
   handler: async (params, { esClient, logger }) => {

@@ -134,8 +134,8 @@ export const manageSubscriptionsTool: BuiltinSkillBoundedTool<typeof manageSubsc
     `(${SUBMIT_SUBSCRIPTION_API_PATH}, ${LIST_SUBSCRIPTIONS_API_PATH}, ${DELETE_SUBSCRIPTION_API_PATH}). ` +
     'Three actions: `create` (propose or persist), `list` (inspect), `delete` (remove by id). ' +
     'For `create` with `confirm=false`, returns parameters for an editable confirmation card ' +
-    "that submits directly to the plugin's internal route. Inside Kibana, prefer calling the " +
-    'routes directly via `execute_workflow_step` + `kibana-request`.',
+    "that submits directly to the plugin's internal route. Agent Builder should call this " +
+    'tool directly; native Workflows and UI surfaces use the matching HTTP routes.',
   schema: manageSubscriptionsSchema,
   handler: async (input, { esClient, logger, spaceId }) => {
     const client = esClient.asCurrentUser;

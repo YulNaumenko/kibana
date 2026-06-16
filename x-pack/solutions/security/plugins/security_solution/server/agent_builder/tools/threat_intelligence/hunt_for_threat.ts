@@ -84,8 +84,8 @@ export const huntForThreatTool: BuiltinSkillBoundedTool<typeof huntForThreatSche
     `Portability wrapper around POST ${HUNT_FOR_THREAT_API_PATH}. ` +
     "Active forward hunt for a threat report's IOCs (and optional ATT&CK technique IDs) " +
     'across the customer environment. Returns top matching documents AND an `affected_assets` ' +
-    'aggregation (unique hosts + users). Inside Kibana, prefer calling the route directly via ' +
-    '`execute_workflow_step` + `kibana-request`.',
+    'aggregation (unique hosts + users). Agent Builder should call this tool directly; native ' +
+    'Workflows and UI surfaces use the matching HTTP route.',
   schema: huntForThreatSchema,
   handler: async (params, { esClient, logger }) => {
     try {

@@ -101,10 +101,9 @@ const searchReportsBodySchema = schema.object({
 
 /**
  * Public route exposing the `search_reports` domain action — hybrid
- * semantic + BM25 search over `.kibana-threat-reports-*`. This is the
- * canonical execution surface; the agent calls it via
- * `execute_workflow_step` with `kibana-request`. The Agent Builder tool
- * wrapper delegates to the same `searchReports` service.
+ * semantic + BM25 search over `.kibana-threat-reports-*`. Native HTTP
+ * consumers call this route directly; Agent Builder calls the matching tool,
+ * which delegates to the same `searchReports` service.
  */
 export const registerSearchReportsRoute = ({
   router,

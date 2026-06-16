@@ -31,13 +31,10 @@ import {
 /**
  * Thin Agent Builder tool wrapper for the `search_reports` domain action.
  *
- * Per the Agent Builder architecture guidance, the canonical execution
- * surface is the internal HTTP route at `SEARCH_REPORTS_API_PATH` and the
- * orchestrating agent should prefer `execute_workflow_step` with
- * `kibana-request` against that route. This tool is retained only as a
- * portability surface for 3rd party agents (Claude, Cursor) that can't
- * reach Kibana APIs natively — it delegates to the same shared service
- * the route uses, so the two paths can never drift.
+ * Agent Builder calls this tool directly. The internal HTTP route at
+ * `SEARCH_REPORTS_API_PATH` remains the contract for native Workflows, UI
+ * surfaces, and future ecli callers. Both entry points delegate to the same
+ * shared service so the two paths cannot drift.
  */
 const searchReportsSchema = z.object({
   query: z
