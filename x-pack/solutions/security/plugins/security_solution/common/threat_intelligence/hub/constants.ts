@@ -171,7 +171,7 @@ export const THREAT_INTELLIGENCE_API_BASE = '/api/threat_intelligence' as const;
 
 /**
  * Domain action routes — these are the canonical execution surface of the
- * skill. Each path is consumed by exactly one route handler in
+ * skill. Each path is consumed by exactly one Express route handler in
  * `server/routes/` and by exactly one shared service module in
  * `server/services/`.
  */

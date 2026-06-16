@@ -48,7 +48,7 @@ export interface RouteRegistrationDeps {
  * of routing agents through workflow-generated Kibana requests.
  */
 export const registerRoutes = (deps: RouteRegistrationDeps): void => {
-  // Domain-action HTTP contracts.
+  // Domain-action routes — canonical execution surface.
   registerSearchReportsRoute(deps);
   registerIngestReportRoute(deps);
   registerHuntBehaviorRoute(deps);
