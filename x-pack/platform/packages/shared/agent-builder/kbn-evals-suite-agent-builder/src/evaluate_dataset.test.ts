@@ -15,7 +15,7 @@ import type {
 import type { EsClient } from '@kbn/scout';
 import type { ToolingLog } from '@kbn/tooling-log';
 import { extractSearchRetrievedDocs } from './rag_extractor';
-import { createEvaluateExternalDataset } from './evaluate_dataset';
+import { createEvaluateDataset, createEvaluateExternalDataset } from './evaluate_dataset';
 import type { AgentBuilderEvaluationChatClient } from './chat_client';
 
 describe('extractSearchRetrievedDocs', () => {
@@ -218,5 +218,109 @@ describe('createEvaluateExternalDataset', () => {
       }),
       expect.any(Array)
     );
+  });
+});
+
+describe('createEvaluateDataset', () => {
+  const originalSelectedEvaluators = process.env.SELECTED_EVALUATORS;
+
+  afterEach(() => {
+    process.env.SELECTED_EVALUATORS = originalSelectedEvaluators;
+  });
+
+  function createTraceEvaluator(name: string): Evaluator<Example, unknown> {
+    return {
+      name,
+      kind: 'CODE',
+      evaluate: async () => ({ score: 1 }),
+    };
+  }
+
+  function createDefaultEvaluators(): DefaultEvaluators {
+    return {
+      criteria: () => ({
+        name: 'Criteria',
+        kind: 'LLM',
+        evaluate: async () => ({ score: 1 }),
+      }),
+      correctnessAnalysis: () => ({
+        name: 'CorrectnessAnalysis',
+        kind: 'LLM',
+        evaluate: async () => ({ score: 1 }),
+      }),
+      groundednessAnalysis: () => ({
+        name: 'GroundednessAnalysis',
+        kind: 'LLM',
+        evaluate: async () => ({ score: 1 }),
+      }),
+      traceBasedEvaluators: {
+        inputTokens: createTraceEvaluator('InputTokens'),
+        outputTokens: createTraceEvaluator('OutputTokens'),
+        latency: createTraceEvaluator('Latency'),
+        toolCalls: createTraceEvaluator('ToolCalls'),
+        cachedTokens: createTraceEvaluator('CachedTokens'),
+      },
+    };
+  }
+
+  it('scores expected tool trajectories from metadata', async () => {
+    process.env.SELECTED_EVALUATORS = 'ExpectedToolTrajectory';
+    const runExperiment = jest.fn(async (_experiment, evaluators: Evaluator[]) => {
+      const result = await evaluators[0].evaluate({
+        output: {
+          steps: [
+            { type: 'tool_call', tool_id: 'load_skill', results: [] },
+            { type: 'tool_call', tool_id: 'threat_intel.search_reports', results: [] },
+            { type: 'tool_call', tool_id: 'threat_intel.hunt_for_threat', results: [] },
+          ],
+        },
+        metadata: {
+          expectedToolIds: [
+            'load_skill',
+            'threat_intel.search_reports',
+            'threat_intel.hunt_for_threat',
+          ],
+        },
+      } as never);
+
+      expect(result.score).toBe(1);
+    });
+
+    const evaluator = createEvaluateDataset({
+      evaluators: createDefaultEvaluators(),
+      executorClient: { runExperiment } as unknown as EvalsExecutorClient,
+      chatClient: {
+        converse: async () => ({ errors: [], messages: [], steps: [] }),
+      } as unknown as AgentBuilderEvaluationChatClient,
+      traceEsClient: {} as unknown as EsClient,
+      log: {
+        info: jest.fn(),
+        debug: jest.fn(),
+        warning: jest.fn(),
+        error: jest.fn(),
+      } as unknown as ToolingLog,
+    });
+
+    await evaluator({
+      dataset: {
+        name: 'test dataset',
+        description: 'test dataset description',
+        examples: [
+          {
+            input: { question: 'test' },
+            output: { expected: 'test' },
+            metadata: {
+              expectedToolIds: [
+                'load_skill',
+                'threat_intel.search_reports',
+                'threat_intel.hunt_for_threat',
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(runExperiment).toHaveBeenCalledTimes(1);
   });
 });

@@ -7,10 +7,12 @@
 
 import { platformCoreTools } from '@kbn/agent-builder-common';
 import { validateSkillDefinition } from '@kbn/agent-builder-server/skills/type_definition';
+import { THREAT_INTEL_TOOL_IDS } from '../../../common/threat_intelligence/hub';
 import { threatHuntingSkill } from './threat_hunting';
 import { alertAnalysisSkill } from './alert_analysis';
+import { threatIntelligenceSkill } from './threat_intelligence';
 
-const ALL_SKILLS = [threatHuntingSkill, alertAnalysisSkill];
+const ALL_SKILLS = [threatHuntingSkill, alertAnalysisSkill, threatIntelligenceSkill];
 
 describe('Security Skills', () => {
   describe('threat-hunting skill', () => {
@@ -95,6 +97,27 @@ describe('Security Skills', () => {
 
     it('content references entity-analytics skill for deeper profiling', () => {
       expect(alertAnalysisSkill.content).toContain('entity-analytics');
+    });
+  });
+
+  describe('threat-intelligence skill', () => {
+    it('validates successfully via validateSkillDefinition', async () => {
+      await expect(validateSkillDefinition(threatIntelligenceSkill)).resolves.toBeDefined();
+    });
+
+    it('returns 7 inline tools', async () => {
+      const inlineTools = await threatIntelligenceSkill.getInlineTools!();
+      expect(inlineTools).toHaveLength(7);
+    });
+
+    it('includes registry tools used by advisory and orchestrated hunt prompts', () => {
+      const tools = threatIntelligenceSkill.getRegistryTools!();
+      expect(tools).toEqual(
+        expect.arrayContaining([
+          THREAT_INTEL_TOOL_IDS.huntOrchestrated,
+          THREAT_INTEL_TOOL_IDS.synthesizeAdvisory,
+        ])
+      );
     });
   });
 

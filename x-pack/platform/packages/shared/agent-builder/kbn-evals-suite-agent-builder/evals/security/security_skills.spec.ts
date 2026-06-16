@@ -249,6 +249,184 @@ evaluate.describe(
 );
 
 evaluate.describe(
+  'Security Skills - Threat Intelligence',
+  { tag: [...tags.serverless.security.complete, ...tags.serverless.security.ease] },
+  () => {
+    evaluate(
+      'threat intelligence queries activate the correct skill and tools',
+      async ({ evaluateDataset }) => {
+        await evaluateDataset({
+          dataset: {
+            name: 'agent builder: security-threat-intelligence-skill',
+            description:
+              'Validates threat-intelligence skill routing and expected threat_intel tool trajectories against data-generator fixtures',
+            examples: [
+              {
+                input: {
+                  question:
+                    'Do we have recent threat intel about abuse of remote management tools like AWS Systems Manager?',
+                },
+                output: {
+                  expected:
+                    'I will search the threat intelligence reports for AWS Systems Manager and remote management abuse, then summarize the most relevant reports and techniques.',
+                },
+                metadata: {
+                  query_intent: 'Threat Intelligence Search',
+                  expectedSkill: 'threat-intelligence',
+                  expectedToolIds: ['load_skill', 'threat_intel.search_reports'],
+                },
+              },
+              {
+                input: {
+                  question:
+                    'Take the most actionable recent cloud-security report and check whether it overlaps with activity in my environment.',
+                },
+                output: {
+                  expected:
+                    'I will find the most actionable cloud-security report, then hunt for its IOCs and ATT&CK techniques across environment data.',
+                },
+                metadata: {
+                  query_intent: 'Threat Intelligence Environment Hunt',
+                  expectedSkill: 'threat-intelligence',
+                  expectedToolIds: [
+                    'load_skill',
+                    'threat_intel.search_reports',
+                    'threat_intel.hunt_for_threat',
+                  ],
+                },
+              },
+              {
+                input: {
+                  question:
+                    'Use a one-call orchestrated hunt for the most relevant AWS SSM threat report and include affected assets if there are hits.',
+                },
+                output: {
+                  expected:
+                    'I will find the relevant AWS SSM report and run the orchestrated threat-intel hunt so Tier 1 environment hits and Tier 2 behavior analysis stay linked.',
+                },
+                metadata: {
+                  query_intent: 'Threat Intelligence Orchestrated Hunt',
+                  expectedSkill: 'threat-intelligence',
+                  expectedToolIds: [
+                    'load_skill',
+                    'threat_intel.search_reports',
+                    'threat_intel.hunt_orchestrated',
+                  ],
+                },
+              },
+              {
+                input: {
+                  question:
+                    'What coverage gaps do recent cloud-security or ransomware reports suggest?',
+                },
+                output: {
+                  expected:
+                    'I will compare in-the-wild ATT&CK techniques from threat reports against Detection Engine rule coverage and recommend what to enable or create.',
+                },
+                metadata: {
+                  query_intent: 'Threat Intelligence Coverage Gap',
+                  expectedSkill: 'threat-intelligence',
+                  expectedToolIds: ['load_skill', 'threat_intel.coverage_gap'],
+                },
+              },
+              {
+                input: {
+                  question:
+                    'Analyze my environment and recommend relevant threat intel focus areas.',
+                },
+                output: {
+                  expected:
+                    'I will profile active data streams, OS families, and cloud providers, then recommend threat-intel focus areas that fit the environment.',
+                },
+                metadata: {
+                  query_intent: 'Threat Intelligence Environment Profile',
+                  expectedSkill: 'threat-intelligence',
+                  expectedToolIds: ['load_skill', 'threat_intel.analyse_environment'],
+                },
+              },
+              {
+                input: {
+                  question:
+                    'Extract IOCs from this report text: attackers used 45.83.64.10 and https://evil-ssm-control.net/update.ps1 during remote management abuse.',
+                },
+                output: {
+                  expected:
+                    'I will extract the IP, domain, and URL indicators from the pasted report text.',
+                },
+                metadata: {
+                  query_intent: 'Threat Intelligence IOC Extraction',
+                  expectedSkill: 'threat-intelligence',
+                  expectedToolIds: ['load_skill', 'threat_intel.extract_iocs'],
+                },
+              },
+              {
+                input: {
+                  question:
+                    'Extract the ATT&CK behaviors from this report: the actor used remote management to launch PowerShell and download tools from attacker infrastructure.',
+                },
+                output: {
+                  expected:
+                    'I will extract and validate ATT&CK behaviors such as PowerShell execution, ingress tool transfer, and remote access tool abuse.',
+                },
+                metadata: {
+                  query_intent: 'Threat Intelligence Behavior Extraction',
+                  expectedSkill: 'threat-intelligence',
+                  expectedToolIds: ['load_skill', 'threat_intel.hunt_behavior'],
+                },
+              },
+              {
+                input: {
+                  question:
+                    'Create a concise advisory from recent medium-or-higher cloud-security threat intel.',
+                },
+                output: {
+                  expected:
+                    'I will synthesize a short cloud-security advisory from recent medium-or-higher threat reports and include recommended actions.',
+                },
+                metadata: {
+                  query_intent: 'Threat Intelligence Advisory',
+                  expectedSkill: 'threat-intelligence',
+                  expectedToolIds: ['load_skill', 'threat_intel.synthesize_advisory'],
+                },
+              },
+              {
+                input: {
+                  question: 'Show my current threat intelligence digest subscriptions.',
+                },
+                output: {
+                  expected:
+                    'I will list the current threat intelligence digest subscriptions and summarize their tags, schedule, delivery target, and severity threshold.',
+                },
+                metadata: {
+                  query_intent: 'Threat Intelligence Subscriptions',
+                  expectedSkill: 'threat-intelligence',
+                  expectedToolIds: ['load_skill', 'threat_intel.manage_subscriptions'],
+                },
+              },
+              {
+                input: {
+                  question:
+                    'Generalize these alerts into durable behavioral detection ideas: a host launched PowerShell from a remote management agent and downloaded tooling from attacker infrastructure.',
+                },
+                output: {
+                  expected:
+                    'I will generalize the alert pattern into durable ATT&CK behaviors and propose detection ideas that do not depend on rotating IOCs.',
+                },
+                metadata: {
+                  query_intent: 'Threat Intelligence Telemetry Generalization',
+                  expectedSkill: 'threat-intelligence',
+                  expectedToolIds: ['load_skill', 'threat_intel.generalize_from_telemetry'],
+                },
+              },
+            ],
+          },
+        });
+      }
+    );
+  }
+);
+
+evaluate.describe(
   'Security Skills - Distractor Queries',
   { tag: [...tags.serverless.security.complete, ...tags.serverless.security.ease] },
   () => {

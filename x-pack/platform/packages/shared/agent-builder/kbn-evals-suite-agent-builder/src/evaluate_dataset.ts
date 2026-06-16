@@ -49,6 +49,15 @@ interface DatasetExample extends Example {
   };
 }
 
+const getStringArrayMeta = (
+  metadata: Record<string, unknown> | undefined,
+  key: string
+): string[] => {
+  const value = metadata?.[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+};
+
 export type EvaluateDataset = ({
   dataset: { name, description, examples },
 }: {
@@ -122,6 +131,43 @@ function configureExperiment({
   });
 
   const selectedEvaluators = selectEvaluators([
+    {
+      name: 'ExpectedToolTrajectory',
+      kind: 'CODE' as const,
+      evaluate: async ({ output, metadata }) => {
+        const expectedToolIds = getStringArrayMeta(
+          metadata as Record<string, unknown> | undefined,
+          'expectedToolIds'
+        );
+        if (expectedToolIds.length === 0) return { score: 1 };
+
+        const toolCalls = getToolCallSteps(output as TaskOutput);
+        const usedToolIds = toolCalls.map((t) => t.tool_id).filter(Boolean);
+        const missingTools = expectedToolIds.filter((toolId) => !usedToolIds.includes(toolId));
+        let searchFrom = 0;
+        const outOfOrderTools: string[] = [];
+
+        for (const toolId of expectedToolIds) {
+          const foundAt = usedToolIds.slice(searchFrom).indexOf(toolId);
+          if (foundAt === -1) {
+            outOfOrderTools.push(toolId);
+            continue;
+          }
+          searchFrom += foundAt + 1;
+        }
+
+        const score = missingTools.length === 0 && outOfOrderTools.length === 0 ? 1 : 0;
+        return {
+          score,
+          metadata: {
+            expectedToolIds,
+            usedToolIds,
+            missingTools,
+            outOfOrderTools,
+          },
+        };
+      },
+    },
     {
       name: 'ExpectedToolCalled',
       kind: 'CODE' as const,
