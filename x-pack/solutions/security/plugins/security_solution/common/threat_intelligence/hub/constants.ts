@@ -239,7 +239,8 @@ export const SAVED_VIEWS_API_PATH = `${THREAT_INTELLIGENCE_API_BASE}/saved_views
  * current alert to `.kibana-threat-reports*` via Layer 1 indicator reference
  * and/or Layer 2 MITRE technique overlap (see RFC 0002).
  */
-export const FLYOUT_INSIGHTS_API_PATH = `${THREAT_INTELLIGENCE_API_BASE}/flyout_insights` as const;
+export const FLYOUT_INSIGHTS_API_PATH =
+  `${THREAT_INTELLIGENCE_API_BASE}/flyout_insights` as const;
 
 /**
  * Saved-object type for `threat-intelligence-saved-view`. The

@@ -158,9 +158,7 @@ export const searchReportsTool: BuiltinSkillBoundedTool<typeof searchReportsSche
             type: ToolResultType.other,
             data: {
               ...data,
-              ...(renderTag
-                ? { renderTag, attachmentId: buildDigestReportTableAttachmentId(params) }
-                : {}),
+              ...(renderTag ? { renderTag, attachmentId: buildDigestReportTableAttachmentId(params) } : {}),
             },
           },
         ],
