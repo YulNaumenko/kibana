@@ -6,6 +6,7 @@ It generates:
 
 - **Realistic raw endpoint events** and **endpoint alerts** by replaying + scaling vendored “attack episodes”
 - **Full-fidelity Security detection alerts** by running the **Detection Engine Rule Preview** API and copying preview alerts into the real alerts index
+- **Optional threat intelligence fixtures** for local Agent Builder / workflow demos (enable with `--threat-intel`)
 - **Optional synthetic Attack Discoveries (no LLM)** built from the generated Security alerts, time-aligned to the requested date range (enable with `--attacks`)
   - Generated via **Kibana APIs** (Elastic Assistant dev-only route), not by directly bulk-indexing raw alert documents
 
@@ -77,6 +78,12 @@ node x-pack/solutions/security/plugins/security_solution/scripts/data/generate_c
   --start-date 1d --end-date now
 ```
 
+To seed threat intelligence workflow / skill demo data:
+
+```bash
+node x-pack/solutions/security/plugins/security_solution/scripts/data/generate_cli.js --threat-intel --skip-alerts
+```
+
 To also generate synthetic Attack Discoveries (and optionally cases):
 
 ```bash
@@ -145,6 +152,11 @@ Rule preview can be the slowest step for large time ranges (e.g. `--start-date 6
 - `--skip-alerts`: Skip rule preview + copying alerts entirely (raw event/endpoint alert indexing only)
 - `--skip-alerts` also skips Attack Discoveries / Cases (because they depend on Security alerts)
 - `--skip-ruleset-preview`: Skip previews of the selected prebuilt rules (baseline attribution only; faster)
+- `--threat-intel`: Seed deterministic threat intelligence fixtures (**opt-in**)
+  - Creates two enriched `.kibana-threat-reports` docs with IOCs, ATT&CK techniques, behaviors, categories, and ranking fields
+  - Creates three matching `logs-aws.local` source events for `hunt_for_threat` and `analyse_environment`
+  - Creates one `.kibana-threat-intel-subscriptions` digest subscription for subscription / digest demos
+  - Does **not** imply `--attacks` or `--cases`
 - `--attacks`: Generate synthetic Attack Discoveries (**opt-in**)
 - `--cases`: Create Kibana cases from **~50%** of generated Attack Discoveries (**implies `--attacks`**)
   - Creates a case per selected discovery and attaches:
@@ -183,16 +195,17 @@ Rule preview can be the slowest step for large time ranges (e.g. `--start-date 6
 6. **Initializes detections** (so `.alerts-security.alerts-<spaceId>` exists)
 7. Ensures the selected prebuilt rules are **enabled**
 8. Ensures the preview alerts index exists and **clears existing preview documents** (without deleting the index)
-9. If `--skip-alerts` is set, stops after raw indexing.
-10. If `.alerts-security.alerts-<spaceId>` doesn’t exist yet, stops after raw indexing (with a warning).
-11. Runs Rule Preview and copies preview alerts into `.alerts-security.alerts-<spaceId>`:
+9. If `--threat-intel` is set, seeds threat reports, matching `logs-aws.local` source events, and one digest subscription.
+10. If `--skip-alerts` is set, stops after raw indexing and optional threat-intel fixture seeding.
+11. If `.alerts-security.alerts-<spaceId>` doesn’t exist yet, stops after raw indexing (with a warning).
+12. Runs Rule Preview and copies preview alerts into `.alerts-security.alerts-<spaceId>`:
 
 - Baseline: runs a single Insights-style preview once, then **copies/attributes** the resulting preview alerts across the selected prebuilt rules
 - Optional: previews each selected prebuilt rule directly (skippable with `--skip-ruleset-preview`)
 - While copying, alert IDs are namespaced per target rule and `kibana.alert.rule.*` is rewritten so alerts are attributed to **real installed+enabled rules**
 - Alert timestamps are deterministically jittered within the requested time range so alerts interleave across rules in time-sorted views
 
-12. Optionally (with `--attacks`, or `--cases`) creates **synthetic Attack Discoveries (no LLM)** from generated Security alerts
+13. Optionally (with `--attacks`, or `--cases`) creates **synthetic Attack Discoveries (no LLM)** from generated Security alerts
 
 - Discoveries are created via Kibana (dev-only) API:
   - `POST /internal/elastic_assistant/data_generator/attack_discoveries/_create`
@@ -201,7 +214,7 @@ Rule preview can be the slowest step for large time ranges (e.g. `--start-date 6
 - The generator ensures generated discoveries are **backdated** so `@timestamp` / `kibana.alert.start` fall within the requested `--start-date` → `--end-date` range.
 - Discoveries focus on a small set of “risky” host/user pairs (top alert volume), not every entity
 
-13. Optionally (with `--cases`) creates cases from ~50% of generated Attack Discoveries (tagged `data-generator`)
+14. Optionally (with `--cases`) creates cases from ~50% of generated Attack Discoveries (tagged `data-generator`)
 
 ## Troubleshooting
 
