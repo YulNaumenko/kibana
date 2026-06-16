@@ -32,9 +32,10 @@ import {
  * Thin Agent Builder tool wrapper for the `search_reports` domain action.
  *
  * Agent Builder calls this tool directly. The internal HTTP route at
- * `SEARCH_REPORTS_API_PATH` remains the contract for native Workflows, UI
- * surfaces, and future ecli callers. Both entry points delegate to the same
- * shared service so the two paths cannot drift.
+ * `SEARCH_REPORTS_API_PATH` remains the contract for native Workflows and UI
+ * surfaces. Both entry points delegate to the same shared service so the two
+ * paths cannot drift. When `ecli` becomes available in Agent Builder it will
+ * call the route directly and this tool will be superseded.
  */
 const searchReportsSchema = z.object({
   query: z

@@ -162,10 +162,12 @@ export const THREAT_INTEL_TOOL_IDS = {
  * Public HTTP routes owned by this plugin.
  *
  * Every domain action exposes a versioned route at
- * `/api/threat_intelligence/<action>`. Native Workflows, UI surfaces, and
- * future ecli callers use these HTTP contracts directly. Agent Builder
- * skills use the direct `threat_intel.*` tools, which validate compact
- * arguments and delegate to the same shared service modules these routes call.
+ * `/api/threat_intelligence/<action>`. Native Workflows and UI surfaces use
+ * these HTTP contracts directly. Agent Builder skills use the direct
+ * `threat_intel.*` tools, which validate compact arguments and delegate to the
+ * same shared service modules these routes call. When `ecli` becomes available
+ * in Agent Builder it will call these routes directly and the inline tools will
+ * be superseded.
  */
 export const THREAT_INTELLIGENCE_API_BASE = '/api/threat_intelligence' as const;
 

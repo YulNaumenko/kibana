@@ -6,8 +6,11 @@ for every domain action. They are reached through two entry points:
 - **Agent Builder tools** (`threat_intel.*`) — thin wrappers that validate compact
   arguments and call the service directly. Agents should use these.
 - **HTTP routes** (`/api/threat_intelligence/<action>`) — expose the same services
-  over HTTP. Native Workflows reach them via `kibana.request`; `ecli` callers and
-  other HTTP integrations use these routes as well.
+  over HTTP. Native Workflows reach them via `kibana.request`; other HTTP
+  integrations use these routes as well. When `ecli` becomes available in Agent
+  Builder it will invoke these routes directly, at which point the inline tools
+  will be removed — tools are intentionally kept inline (not user-visible) for
+  this reason.
 
 Do **not** generate workflow YAML or route agent calls through
 `workflow_execute_step` + `kibana.request` — call the tools directly.

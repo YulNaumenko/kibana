@@ -42,10 +42,11 @@ export interface RouteRegistrationDeps {
 }
 
 /**
- * Every domain action exposes a public HTTP route for native Workflows, UI
- * surfaces, and future ecli callers. Agent Builder tools in
- * `server/agent_builder/tools/` call the same shared services directly instead
- * of routing agents through workflow-generated Kibana requests.
+ * Every domain action exposes a public HTTP route for native Workflows and UI
+ * surfaces. Agent Builder tools in `server/agent_builder/tools/` call the same
+ * shared services directly instead of routing agents through workflow-generated
+ * Kibana requests. When `ecli` becomes available in Agent Builder it will call
+ * these routes directly and the inline tools will be superseded.
  */
 export const registerRoutes = (deps: RouteRegistrationDeps): void => {
   // Domain-action routes — canonical execution surface.
