@@ -22,10 +22,7 @@ import {
   type ThreatCategory,
   type ThreatRegion,
 } from '../../../common/threat_intelligence/hub';
-import {
-  buildSearchReportsUiHints,
-  withUiHints,
-} from '../../../common/threat_intelligence/hub';
+import { buildSearchReportsUiHints, withUiHints } from '../../../common/threat_intelligence/hub';
 import { searchReports } from '../services';
 import { resolveCurrentSpaceId } from '../lib/space_filter';
 import type { RouteRegistrationDeps } from '.';
