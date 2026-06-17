@@ -65,6 +65,7 @@ const THREAT_INTEL_EVENT_IDS = [
   'data-generator-threat-intel-env-aws-ssm-2',
   'data-generator-threat-intel-env-aws-ssm-3',
 ] as const;
+const THREAT_INTEL_EVAL_ADAPTER_ID = 'data-generator-evals';
 const THREAT_INTEL_SOURCE_ID = 'data-generator-threat-intel-rss-source';
 const THREAT_INTEL_SUBSCRIPTION_ID = 'data-generator-threat-intel-digest';
 type ThreatIntelMode = 'eval' | 'source';
@@ -772,7 +773,7 @@ const buildThreatIntelReport = ({
       type: 'manual',
       name: 'Security data generator',
       url: `data-generator://threat-intel/${id}`,
-      adapter_id: 'data-generator',
+      adapter_id: THREAT_INTEL_EVAL_ADAPTER_ID,
     },
     content: {
       title,
@@ -1032,6 +1033,9 @@ const deleteGeneratedThreatIntelData = async ({
 
   await deleteByIds(THREAT_REPORTS_DATA_STREAM, THREAT_INTEL_REPORT_IDS);
   await deleteByQuery(THREAT_REPORTS_DATA_STREAM, {
+    term: { 'source.adapter_id': THREAT_INTEL_EVAL_ADAPTER_ID },
+  });
+  await deleteByQuery(THREAT_REPORTS_DATA_STREAM, {
     term: { 'source.adapter_id': `rss:${THREAT_INTEL_SOURCE_ID}` },
   });
   await deleteByIds(THREAT_INTEL_SOURCES_INDEX, [THREAT_INTEL_SOURCE_ID]);
@@ -1207,11 +1211,10 @@ const generateThreatIntelData = async ({
     space_id: spaceId,
   }));
 
-  const reportBulk = reports.flatMap((document, index) => [
+  const reportBulk = reports.flatMap((document) => [
     {
       create: {
         _index: THREAT_REPORTS_DATA_STREAM,
-        _id: THREAT_INTEL_REPORT_IDS[index],
       },
     },
     document,

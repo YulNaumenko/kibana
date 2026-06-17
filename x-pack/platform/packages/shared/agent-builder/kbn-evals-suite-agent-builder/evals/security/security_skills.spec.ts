@@ -9,6 +9,7 @@ import { tags } from '@kbn/scout';
 import { evaluate as base } from '../../src/evaluate';
 import type { EvaluateDataset } from '../../src/evaluate_dataset';
 import { createEvaluateDataset } from '../../src/evaluate_dataset';
+import { seedThreatIntelFixtures } from './threat_intel_fixtures';
 
 const evaluate = base.extend<{ evaluateDataset: EvaluateDataset }, {}>({
   evaluateDataset: [
@@ -252,6 +253,17 @@ evaluate.describe(
   'Security Skills - Threat Intelligence',
   { tag: [...tags.serverless.security.complete, ...tags.serverless.security.ease] },
   () => {
+    let teardown: (() => Promise<void>) | undefined;
+
+    evaluate.beforeAll(async ({ esClient, log }) => {
+      const seeded = await seedThreatIntelFixtures({ esClient, log });
+      teardown = seeded.cleanup;
+    });
+
+    evaluate.afterAll(async () => {
+      if (teardown) await teardown();
+    });
+
     evaluate(
       'threat intelligence queries activate the correct skill and tools',
       async ({ evaluateDataset }) => {
