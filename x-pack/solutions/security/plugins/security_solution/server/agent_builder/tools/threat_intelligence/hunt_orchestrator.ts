@@ -26,6 +26,10 @@ import { huntOrchestrated } from '../../../threat_intelligence/services';
  * surface for one-call workflows (digest delivery, hit provenance
  * backfill) and for 3rd party agents that prefer a single round-trip.
  *
+ * Agent Builder should call this tool directly. Native Workflows and UI
+ * surfaces use the matching HTTP route, and both entry points delegate to the
+ * same shared service.
+ *
  * The handler resolves the default model via `modelProvider` (same
  * pattern `hunt_behavior` uses) and threads it into the orchestrator;
  * when GenAI is unavailable, the model is intentionally omitted so the
@@ -133,8 +137,8 @@ export const huntOrchestratedTool: BuiltinSkillBoundedTool<typeof huntOrchestrat
     'both "what is currently hitting" AND "what durable rule would catch this in the future" ' +
     'from a single tool call — typical for digest synthesis and per-report deep-dive flows. ' +
     'When fine-grained control is needed, prefer the granular `hunt_for_threat` + ' +
-    '`hunt_behavior` tools. Inside Kibana orchestration, prefer calling the route directly ' +
-    'via `execute_workflow_step` + `kibana-request`.',
+    '`hunt_behavior` tools. Agent Builder should call this tool directly; native Workflows ' +
+    'and UI surfaces use the matching HTTP route.',
   schema: huntOrchestratedSchema,
   handler: async (params, { esClient, logger, modelProvider }) => {
     let model;

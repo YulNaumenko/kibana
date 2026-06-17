@@ -90,8 +90,8 @@ export const synthesizeAdvisoryTool: BuiltinSkillBoundedTool<typeof synthesizeAd
     '/ region, and asks the LLM to produce a 2-3 paragraph narrative + a short ' +
     'recommended-actions list. When `persist: true`, the advisory is written to the ' +
     '`.kibana-threat-intel-advisories` companion index for dashboard / digest consumption. ' +
-    'Inside Kibana orchestration, prefer calling the route directly via ' +
-    '`execute_workflow_step` + `kibana-request`.',
+    'Agent Builder should call this tool directly; native Workflows and UI surfaces use the ' +
+    'matching HTTP route.',
   schema: synthesizeAdvisorySchema,
   handler: async (params, { esClient, logger, modelProvider }) => {
     let model;
@@ -105,8 +105,8 @@ export const synthesizeAdvisoryTool: BuiltinSkillBoundedTool<typeof synthesizeAd
     try {
       // Agent Builder tools don't carry a request-scoped space — fall
       // back to the global sentinel so the service still works under
-      // single-space deployments. Inside-Kibana orchestration should
-      // prefer the HTTP route for proper per-space scoping.
+      // single-space deployments. Native Workflow and UI callers use the
+      // HTTP route for request-scoped space resolution.
       const data = await synthesizeAdvisory(
         esClient.asCurrentUser,
         model,

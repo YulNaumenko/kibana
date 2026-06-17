@@ -67,7 +67,8 @@ export const coverageGapTool: BuiltinSkillBoundedTool<typeof coverageGapSchema> 
     'from disabled rules that should be re-enabled (`coverage_recommendation: enable_existing`) ' +
     'versus techniques with no rule (`create_rule`). When techniques are returned, ' +
     'automatically stores a `threat-intel-mitre-heatmap` attachment (`mode: "coverage"`) and ' +
-    'includes a `renderTag` in the tool result. Inside Kibana, prefer the route via `kibana-request`.',
+    'includes a `renderTag` in the tool result. Agent Builder should call this tool directly; ' +
+    'native Workflows and UI surfaces use the matching HTTP route.',
   schema: coverageGapSchema,
   handler: async (params, { esClient, savedObjectsClient, logger, attachments }) => {
     try {

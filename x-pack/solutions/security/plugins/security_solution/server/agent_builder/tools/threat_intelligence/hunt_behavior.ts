@@ -55,8 +55,8 @@ export const huntBehaviorTool: BuiltinSkillBoundedTool<typeof huntBehaviorSchema
     'MITRE ATT&CK technique IDs with evidence quotes; (2) each candidate is validated against ' +
     'the vendored Kibana ATT&CK catalog. Hallucinated or unknown IDs are dropped. Surviving ' +
     'candidates return as behavioral findings with a `proposed_esql_rule` body and a pre-built ' +
-    '`threat-intel-finding-card` attachment hint. Inside Kibana, prefer calling the route ' +
-    'directly via `execute_workflow_step` + `kibana-request`.',
+    '`threat-intel-finding-card` attachment hint. Agent Builder should call this tool directly; ' +
+    'native Workflows and UI surfaces use the matching HTTP route.',
   schema: huntBehaviorSchema,
   handler: async (params, { logger, modelProvider }) => {
     try {

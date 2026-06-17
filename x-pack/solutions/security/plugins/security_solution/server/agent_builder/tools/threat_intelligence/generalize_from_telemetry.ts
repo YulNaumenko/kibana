@@ -97,8 +97,8 @@ export const generalizeFromTelemetryTool: BuiltinSkillBoundedTool<
     'detection rules. A synthetic `source.type: "telemetry"` row is persisted to ' +
     '`.kibana-threat-reports-*` for provenance. Surviving candidates are returned with the ' +
     'same `proposed_esql_rule` + `threat-intel-finding-card` attachment-hint shape as ' +
-    '`hunt_behavior`. Inside Kibana, prefer calling the route directly via ' +
-    '`execute_workflow_step` + `kibana-request`.',
+    '`hunt_behavior`. Agent Builder should call this tool directly; native Workflows and UI ' +
+    'surfaces use the matching HTTP route.',
   schema: generalizeFromTelemetrySchema,
   handler: async (params, { esClient, logger, modelProvider, spaceId }) => {
     try {
