@@ -13,7 +13,10 @@ import type { ToolingLog } from '@kbn/tooling-log';
 import datemath from '@kbn/datemath';
 import { asyncForEach } from '@kbn/std';
 import type { Client } from '@elastic/elasticsearch';
-import type { IndicesGetMappingResponse } from '@elastic/elasticsearch/lib/api/types';
+import type {
+  IndicesGetMappingResponse,
+  QueryDslQueryContainer,
+} from '@elastic/elasticsearch/lib/api/types';
 import type { KbnClient } from '@kbn/test';
 
 import { createEsClient, createKbnClient } from './lib/clients';
@@ -42,6 +45,7 @@ import {
   type GeneratedAttackDiscoveryGroup,
 } from './lib/attack_discoveries';
 import {
+  THREAT_INTEL_SOURCES_INDEX,
   THREAT_INTEL_SUBSCRIPTIONS_INDEX,
   THREAT_REPORTS_DATA_STREAM,
 } from '../../common/threat_intelligence/hub';
@@ -61,7 +65,9 @@ const THREAT_INTEL_EVENT_IDS = [
   'data-generator-threat-intel-env-aws-ssm-2',
   'data-generator-threat-intel-env-aws-ssm-3',
 ] as const;
+const THREAT_INTEL_SOURCE_ID = 'data-generator-threat-intel-rss-source';
 const THREAT_INTEL_SUBSCRIPTION_ID = 'data-generator-threat-intel-digest';
+type ThreatIntelMode = 'eval' | 'source';
 
 const normalizeApiKey = (input: string): string => input.trim().replace(/^ApiKey\s+/i, '');
 
@@ -662,6 +668,65 @@ const sha256 = (input: string): string => crypto.createHash('sha256').update(inp
 const defang = (value: string): string =>
   value.replace(/\./g, '[.]').replace(/^https?:/, 'https[:]');
 
+const buildThreatIntelScenarioText = () => ({
+  primaryBody:
+    'Ransomware operators are abusing AWS Systems Manager for remote management access. ' +
+    'The actor uses amazon-ssm-agent to launch PowerShell and download tooling from ' +
+    'https://evil-ssm-control.net/update.ps1. Observed infrastructure includes 45.83.64.10 ' +
+    'and evil-ssm-control.net. Detection teams should hunt for PowerShell or shell execution ' +
+    'from SSM agents, followed by ingress tool transfer from attacker infrastructure.',
+  relatedBody:
+    'A related cloud-security advisory describes remote management abuse through AWS SSM ' +
+    'RunShellScript commands. The same control infrastructure, 45.83.64.10 and ' +
+    'evil-ssm-control.net, was used to stage scripts and transfer tooling. Durable coverage ' +
+    'should focus on T1059.001, T1105, and T1219 rather than only blocking the current IOCs.',
+});
+
+const xmlEscape = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+const cdata = (value: string): string =>
+  `<![CDATA[${value.replace(/\]\]>/g, ']]]]><![CDATA[>')}]]>`;
+
+const buildThreatIntelRssDataUrl = ({
+  reportTimestamp,
+  relatedReportTimestamp,
+}: {
+  reportTimestamp: string;
+  relatedReportTimestamp: string;
+}): string => {
+  const { primaryBody, relatedBody } = buildThreatIntelScenarioText();
+  const feedBody = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Security data generator threat intelligence</title>
+    <link>https://example.elastic.dev/security-data-generator/threat-intel</link>
+    <language>en</language>
+    <item>
+      <title>Ransomware operators abusing AWS SSM and PowerShell</title>
+      <guid isPermaLink="false">${xmlEscape(THREAT_INTEL_REPORT_IDS[0])}</guid>
+      <link>https://example.elastic.dev/security-data-generator/threat-intel/aws-ssm-ransomware</link>
+      <pubDate>${new Date(reportTimestamp).toUTCString()}</pubDate>
+      <description>${cdata(primaryBody)}</description>
+    </item>
+    <item>
+      <title>Synthetic advisory: AWS SSM agent abuse for remote access</title>
+      <guid isPermaLink="false">${xmlEscape(THREAT_INTEL_REPORT_IDS[1])}</guid>
+      <link>https://example.elastic.dev/security-data-generator/threat-intel/aws-ssm-agent-abuse</link>
+      <pubDate>${new Date(relatedReportTimestamp).toUTCString()}</pubDate>
+      <description>${cdata(relatedBody)}</description>
+    </item>
+  </channel>
+</rss>`;
+
+  return `data:application/rss+xml;charset=utf-8,${encodeURIComponent(feedBody)}`;
+};
+
 const buildThreatIntelReport = ({
   id,
   timestamp,
@@ -949,7 +1014,27 @@ const deleteGeneratedThreatIntelData = async ({
     }
   };
 
+  const deleteByQuery = async (index: string, query: QueryDslQueryContainer) => {
+    try {
+      await esClient.deleteByQuery({
+        index,
+        conflicts: 'proceed',
+        refresh: true,
+        query,
+      });
+    } catch (e) {
+      const status = getStatusCode(e);
+      if (status !== 404) {
+        throw e;
+      }
+    }
+  };
+
   await deleteByIds(THREAT_REPORTS_DATA_STREAM, THREAT_INTEL_REPORT_IDS);
+  await deleteByQuery(THREAT_REPORTS_DATA_STREAM, {
+    term: { 'source.adapter_id': `rss:${THREAT_INTEL_SOURCE_ID}` },
+  });
+  await deleteByIds(THREAT_INTEL_SOURCES_INDEX, [THREAT_INTEL_SOURCE_ID]);
   await deleteByIds(THREAT_INTEL_SUBSCRIPTIONS_INDEX, [THREAT_INTEL_SUBSCRIPTION_ID]);
   await deleteByIds(THREAT_INTEL_ENVIRONMENT_INDEX, THREAT_INTEL_EVENT_IDS);
   log.info(`Deleted prior threat-intel generator fixtures, if present.`);
@@ -982,20 +1067,70 @@ const ensureThreatIntelDataStream = async ({
   }
 };
 
+const seedThreatIntelEnvironmentDocs = async ({
+  esClient,
+  log,
+  eventTimestamps,
+}: {
+  esClient: Client;
+  log: ToolingLog;
+  eventTimestamps: string[];
+}) => {
+  const envDocs = buildThreatIntelEnvironmentDocs(eventTimestamps);
+  const envBulk = envDocs.flatMap((document, index) => [
+    { index: { _index: THREAT_INTEL_ENVIRONMENT_INDEX, _id: THREAT_INTEL_EVENT_IDS[index] } },
+    document,
+  ]);
+  const envResponse = await esClient.bulk({ refresh: true, body: envBulk });
+  assertNoBulkErrors(THREAT_INTEL_ENVIRONMENT_INDEX, envResponse, log);
+  return envDocs.length;
+};
+
+const seedThreatIntelDigestSubscription = async ({
+  esClient,
+  reportTimestamp,
+  spaceId,
+}: {
+  esClient: Client;
+  reportTimestamp: string;
+  spaceId: string;
+}) => {
+  await esClient.index({
+    index: THREAT_INTEL_SUBSCRIPTIONS_INDEX,
+    id: THREAT_INTEL_SUBSCRIPTION_ID,
+    refresh: true,
+    document: {
+      owner: 'data-generator',
+      tags: ['data-generator', 'cloud-security', 'ransomware'],
+      severity_threshold: 'medium',
+      schedule_rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0',
+      delivery: { type: 'email', target: 'security-ops@example.com' },
+      human_summary:
+        'Daily digest of medium+ severity reports tagged `data-generator`, `cloud-security`, `ransomware` delivered to `security-ops@example.com`.',
+      template_id: 'data-generator-threat-intel',
+      space_id: spaceId,
+      created_at: reportTimestamp,
+      updated_at: reportTimestamp,
+    },
+  });
+};
+
 const generateThreatIntelData = async ({
   esClient,
   log,
   startMs,
   endMs,
   spaceId,
+  mode,
 }: {
   esClient: Client;
   log: ToolingLog;
   startMs: number;
   endMs: number;
   spaceId: string;
+  mode: ThreatIntelMode;
 }) => {
-  log.info(`--threat-intel enabled: seeding threat reports, subscriptions, and source events.`);
+  log.info(`Seeding threat-intel ${mode} fixtures.`);
 
   await ensureThreatIntelDataStream({ esClient, log });
   await ensureThreatIntelEnvironmentIndex({ esClient, log });
@@ -1008,17 +1143,41 @@ const generateThreatIntelData = async ({
     timestampAt(startMs, endMs, 0.84),
     timestampAt(startMs, endMs, 0.86),
   ];
-  const primaryBody =
-    'Ransomware operators are abusing AWS Systems Manager for remote management access. ' +
-    'The actor uses amazon-ssm-agent to launch PowerShell and download tooling from ' +
-    'https://evil-ssm-control.net/update.ps1. Observed infrastructure includes 45.83.64.10 ' +
-    'and evil-ssm-control.net. Detection teams should hunt for PowerShell or shell execution ' +
-    'from SSM agents, followed by ingress tool transfer from attacker infrastructure.';
-  const relatedBody =
-    'A related cloud-security advisory describes remote management abuse through AWS SSM ' +
-    'RunShellScript commands. The same control infrastructure, 45.83.64.10 and ' +
-    'evil-ssm-control.net, was used to stage scripts and transfer tooling. Durable coverage ' +
-    'should focus on T1059.001, T1105, and T1219 rather than only blocking the current IOCs.';
+  const { primaryBody, relatedBody } = buildThreatIntelScenarioText();
+
+  if (mode === 'source') {
+    await esClient.index({
+      index: THREAT_INTEL_SOURCES_INDEX,
+      id: THREAT_INTEL_SOURCE_ID,
+      refresh: true,
+      document: {
+        adapter_type: 'rss',
+        name: 'Security data generator RSS feed',
+        enabled: true,
+        config: {
+          url: buildThreatIntelRssDataUrl({
+            reportTimestamp,
+            relatedReportTimestamp,
+          }),
+        },
+        tags: ['data-generator', 'threat-intel', 'cloud-security', 'ransomware'],
+        space_id: spaceId,
+        created_at: reportTimestamp,
+        updated_at: reportTimestamp,
+      },
+    });
+
+    const envDocCount = await seedThreatIntelEnvironmentDocs({ esClient, log, eventTimestamps });
+    await seedThreatIntelDigestSubscription({ esClient, reportTimestamp, spaceId });
+
+    log.info(
+      `Seeded 1 threat-intel source, ${envDocCount} environment event(s), and 1 digest subscription.`
+    );
+    log.info(
+      `Run threat-intel.source_ingestion, then threat-intel.nl_extraction_behavioral to create enriched reports.`
+    );
+    return;
+  }
 
   const reports = [
     buildThreatIntelReport({
@@ -1060,35 +1219,11 @@ const generateThreatIntelData = async ({
   const reportResponse = await esClient.bulk({ refresh: true, body: reportBulk });
   assertNoBulkErrors(THREAT_REPORTS_DATA_STREAM, reportResponse, log);
 
-  const envDocs = buildThreatIntelEnvironmentDocs(eventTimestamps);
-  const envBulk = envDocs.flatMap((document, index) => [
-    { index: { _index: THREAT_INTEL_ENVIRONMENT_INDEX, _id: THREAT_INTEL_EVENT_IDS[index] } },
-    document,
-  ]);
-  const envResponse = await esClient.bulk({ refresh: true, body: envBulk });
-  assertNoBulkErrors(THREAT_INTEL_ENVIRONMENT_INDEX, envResponse, log);
-
-  await esClient.index({
-    index: THREAT_INTEL_SUBSCRIPTIONS_INDEX,
-    id: THREAT_INTEL_SUBSCRIPTION_ID,
-    refresh: true,
-    document: {
-      owner: 'data-generator',
-      tags: ['data-generator', 'cloud-security', 'ransomware'],
-      severity_threshold: 'medium',
-      schedule_rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0',
-      delivery: { type: 'email', target: 'security-ops@example.com' },
-      human_summary:
-        'Daily digest of medium+ severity reports tagged `data-generator`, `cloud-security`, `ransomware` delivered to `security-ops@example.com`.',
-      template_id: 'data-generator-threat-intel',
-      space_id: spaceId,
-      created_at: reportTimestamp,
-      updated_at: reportTimestamp,
-    },
-  });
+  const envDocCount = await seedThreatIntelEnvironmentDocs({ esClient, log, eventTimestamps });
+  await seedThreatIntelDigestSubscription({ esClient, reportTimestamp, spaceId });
 
   log.info(
-    `Seeded ${reports.length} threat report(s), ${envDocs.length} environment event(s), and 1 digest subscription.`
+    `Seeded ${reports.length} threat report(s), ${envDocCount} environment event(s), and 1 digest subscription.`
   );
 };
 
@@ -1247,7 +1382,6 @@ export const cli = () => {
     if (typeof v === 'string') return v;
     throw new Error(`Invalid --${name} (expected string)`);
   };
-
   run(
     // eslint-disable-next-line complexity
     async (cliContext) => {
@@ -1264,7 +1398,10 @@ export const cli = () => {
       const skipAlerts = Boolean(cliContext.flags['skip-alerts']);
       const skipRulesetPreview = Boolean(cliContext.flags['skip-ruleset-preview']);
       const validateFixtures = Boolean(cliContext.flags['validate-fixtures']);
-      const threatIntel = Boolean(cliContext.flags['threat-intel']);
+      const threatIntelSource = Boolean(cliContext.flags['threat-intel']);
+      const threatIntelEvals = Boolean(cliContext.flags['threat-intel-evals']);
+      const threatIntel = threatIntelSource || threatIntelEvals;
+      const threatIntelMode: ThreatIntelMode = threatIntelEvals ? 'eval' : 'source';
       const attacks = Boolean(cliContext.flags.attacks);
       const createCases = Boolean(cliContext.flags.cases);
       const shouldGenerateAttackDiscoveries = attacks || createCases;
@@ -1276,6 +1413,9 @@ export const cli = () => {
 
       if (createCases && !attacks) {
         log.info(`--cases enabled: implicitly enabling --attacks.`);
+      }
+      if (threatIntelSource && threatIntelEvals) {
+        throw new Error(`Use either --threat-intel or --threat-intel-evals, not both.`);
       }
 
       assertPositiveInt('events', events);
@@ -1482,6 +1622,7 @@ export const cli = () => {
             startMs,
             endMs,
             spaceId: effectiveSpaceId,
+            mode: threatIntelMode,
           });
         }
 
@@ -1650,6 +1791,7 @@ export const cli = () => {
           'attacks',
           'cases',
           'threat-intel',
+          'threat-intel-evals',
           'validate-fixtures',
         ],
         alias: {
@@ -1676,6 +1818,7 @@ export const cli = () => {
           attacks: false,
           cases: false,
           'threat-intel': false,
+          'threat-intel-evals': false,
           'validate-fixtures': true,
         },
         allowUnexpected: false,
@@ -1692,7 +1835,8 @@ export const cli = () => {
         --max-preview-invocations         Max rule preview invocations per rule (Default: 12). Lower = faster for large time ranges.
         --skip-alerts                     Skip rule preview + copying alerts entirely (raw event/endpoint alert indexing only)
         --skip-ruleset-preview            Skip previews of the selected prebuilt rules (baseline attribution only; faster)
-        --threat-intel                    Seed threat-intel reports, matching source events, and a digest subscription for Agent Builder workflow testing
+        --threat-intel                    Seed a threat-intel RSS source for source_ingestion/nl_extraction workflow testing
+        --threat-intel-evals               Seed enriched threat-intel reports for Agent Builder evals
         --attacks                         Generate synthetic Attack Discoveries (opt-in)
         --cases                          Create cases from ~50% of generated Attack Discoveries (implies --attacks)
         --no-validate-fixtures            Disable fixture validation (default: validation enabled)

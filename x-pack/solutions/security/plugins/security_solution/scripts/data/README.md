@@ -78,10 +78,16 @@ node x-pack/solutions/security/plugins/security_solution/scripts/data/generate_c
   --start-date 1d --end-date now
 ```
 
-To seed threat intelligence workflow / skill demo data:
+To seed source-ingestion data for manually exercising `threat-intel.source_ingestion` and `threat-intel.nl_extraction_behavioral`:
 
 ```bash
-node x-pack/solutions/security/plugins/security_solution/scripts/data/generate_cli.js --threat-intel --skip-alerts
+node x-pack/solutions/security/plugins/security_solution/scripts/data/generate_cli.js --threat-intel
+```
+
+To seed eval-ready threat intelligence workflow / skill demo data:
+
+```bash
+node x-pack/solutions/security/plugins/security_solution/scripts/data/generate_cli.js --threat-intel-evals
 ```
 
 To also generate synthetic Attack Discoveries (and optionally cases):
@@ -153,10 +159,15 @@ Rule preview can be the slowest step for large time ranges (e.g. `--start-date 6
 - `--skip-alerts` also skips Attack Discoveries / Cases (because they depend on Security alerts)
 - `--skip-ruleset-preview`: Skip previews of the selected prebuilt rules (baseline attribution only; faster)
 - `--threat-intel`: Seed deterministic threat intelligence fixtures (**opt-in**)
-  - Creates two enriched `.kibana-threat-reports` docs with IOCs, ATT&CK techniques, behaviors, categories, and ranking fields
+  - Creates an enabled `.kibana-threat-intel-sources` RSS fixture so `threat-intel.source_ingestion` can write pending report docs
+  - Run `threat-intel.nl_extraction_behavioral` after source ingestion to add IOCs, behaviors, categories, and regions
   - Creates three matching `logs-aws.local` source events for `hunt_for_threat` and `analyse_environment`
   - Creates one `.kibana-threat-intel-subscriptions` digest subscription for subscription / digest demos
   - Does **not** imply `--attacks` or `--cases`
+- `--threat-intel-evals`: Seed eval-ready threat intelligence fixtures (**opt-in**)
+  - Creates two enriched `.kibana-threat-reports` docs with IOCs, ATT&CK techniques, behaviors, categories, and ranking fields
+  - Creates the same matching `logs-aws.local` source events and digest subscription as `--threat-intel`
+  - Does **not** run source-ingestion or extraction workflows
 - `--attacks`: Generate synthetic Attack Discoveries (**opt-in**)
 - `--cases`: Create Kibana cases from **~50%** of generated Attack Discoveries (**implies `--attacks`**)
   - Creates a case per selected discovery and attaches:
@@ -195,7 +206,7 @@ Rule preview can be the slowest step for large time ranges (e.g. `--start-date 6
 6. **Initializes detections** (so `.alerts-security.alerts-<spaceId>` exists)
 7. Ensures the selected prebuilt rules are **enabled**
 8. Ensures the preview alerts index exists and **clears existing preview documents** (without deleting the index)
-9. If `--threat-intel` is set, seeds threat reports, matching `logs-aws.local` source events, and one digest subscription.
+9. If `--threat-intel` or `--threat-intel-evals` is set, seeds threat-intel fixtures. `--threat-intel` writes an enabled RSS source fixture for workflow testing. `--threat-intel-evals` writes enriched reports directly for evals. Both modes add matching `logs-aws.local` source events and one digest subscription.
 10. If `--skip-alerts` is set, stops after raw indexing and optional threat-intel fixture seeding.
 11. If `.alerts-security.alerts-<spaceId>` doesn’t exist yet, stops after raw indexing (with a warning).
 12. Runs Rule Preview and copies preview alerts into `.alerts-security.alerts-<spaceId>`:
