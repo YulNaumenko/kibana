@@ -37,7 +37,6 @@ import { createModelProviderFactory } from './services/execution/runner/model_pr
 import { createSmlTools } from './services/tools/builtin/sml';
 import { createConnectorTools } from './services/tools/builtin/connectors';
 import { createAdminPrivilegeSwitcher } from './capabilities/admin_privilege_switcher';
-import { syncAgentBuilderOverviewDashboard } from './dashboard';
 import { registerInferenceFeatures } from './inference_features';
 
 export class AgentBuilderPlugin
@@ -97,6 +96,7 @@ export class AgentBuilderPlugin
       trackingService: this.trackingService,
       cloud: setupDeps.cloud,
       usageApi: setupDeps.usageApi,
+      actions: setupDeps.actions,
     });
 
     registerTaskDefinitions({
@@ -165,11 +165,11 @@ export class AgentBuilderPlugin
     });
 
     const smlTools = createSmlTools({
-      getAgentContextLayer: () => {
+      getAgentBuilderSml: () => {
         if (!this.startDeps) {
-          throw new Error('Agent Context Layer not available — plugin has not started');
+          throw new Error('Agent Builder SML not available — plugin has not started');
         }
-        return this.startDeps.agentContextLayer;
+        return this.startDeps.agentBuilderSml;
       },
     });
     smlTools.forEach((tool) => {
@@ -192,9 +192,13 @@ export class AgentBuilderPlugin
       },
       agents: {
         register: serviceSetups.agents.register.bind(serviceSetups.agents),
+        registerType: serviceSetups.agents.registerType.bind(serviceSetups.agents),
       },
       attachments: {
         registerType: serviceSetups.attachments.registerType.bind(serviceSetups.attachments),
+      },
+      renderers: {
+        register: serviceSetups.renderers.register.bind(serviceSetups.renderers),
       },
       hooks: {
         register: serviceSetups.hooks.register.bind(serviceSetups.hooks),
@@ -251,16 +255,6 @@ export class AgentBuilderPlugin
     if (this.home) {
       registerSampleData(this.home, this.logger);
     }
-
-    void syncAgentBuilderOverviewDashboard(
-      coreStart,
-      this.config.tracing.send_to_self,
-      this.logger
-    ).catch((error) => {
-      this.logger.error(
-        `Failed to sync Agent Builder overview dashboard: ${(error as Error).message}`
-      );
-    });
 
     const modelProviderFactory = createModelProviderFactory({
       inference,

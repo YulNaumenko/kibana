@@ -22,3 +22,4 @@ export * from './update_latest_executed_state';
 export * from './step_install_precheck';
 export * from './step_install_workflow_assets';
 export * from './step_install_agent_assets';
+export * from './step_verify_assets';
